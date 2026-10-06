@@ -8,7 +8,7 @@ import {
   FLUX_PER_TRIP,
 } from '../constants.js';
 import { edgeDist, angleLerp, closestPoint } from './geom.js';
-import { startSwing, updateSwing, acquireTarget, canTarget } from './combat.js';
+import { startSwing, updateSwing, acquireTarget, canTarget, untouchable, STRIKE_EPS } from './combat.js';
 
 const isWorker = (u) => u.def.role === 'worker' || u.def.role === 'builder';
 
@@ -49,6 +49,8 @@ export function moveTo(world, u, gx, gy, opts = {}) {
   const tol = opts.tolerance ?? ARRIVE_EPS;
   const target = opts.target || null;
   const speed = opts.speed ?? unitSpeed(world, u);
+  const big = u.def.clearance === 2;
+  const survival = world.mode === 'survival';
   // arrival test
   if (target) {
     if (edgeDist(u, target) <= tol) return 'arrived';
@@ -61,7 +63,8 @@ export function moveTo(world, u, gx, gy, opts = {}) {
   if (!nav || nav.key !== key) {
     // allow small goal drift for moving unit targets without repathing every tick
     if (nav && target && target.kind === 'unit' && nav.targetId === target.id) {
-      if (Math.hypot(nav.gx - target.x, nav.gy - target.y) < 1.5) nav.key = key;
+      // (survival: unless the path ran out and asked for a fresh one)
+      if (Math.hypot(nav.gx - target.x, nav.gy - target.y) < 1.5 && !(survival && nav.forceRepath)) nav.key = key;
     }
   }
   if (!nav || nav.key !== key || nav.version !== grid.version || needsRepath(world, u, nav)) {
@@ -70,11 +73,15 @@ export function moveTo(world, u, gx, gy, opts = {}) {
       if (world.pathBudget > 0) {
         world.pathBudget--;
         let path;
+        let direct = false;
         const tx = target ? target.x : gx;
         const ty = target ? target.y : gy;
-        // direct line shortcut
+        // direct line shortcut (2-cell units: only to a point where they fit)
         if (!target || target.kind === 'unit') {
-          if (grid.lineWalkableFat(u.x, u.y, tx, ty, u.r)) path = [[tx, ty]];
+          if (directOk(grid, u, tx, ty, big)) {
+            path = [[tx, ty]];
+            direct = true;
+          }
         }
         if (!path) {
           path = grid.findPath(u.x, u.y, tx, ty, {
@@ -85,6 +92,15 @@ export function moveTo(world, u, gx, gy, opts = {}) {
           });
         }
         if (!path) path = [[tx, ty]];
+        // a 2-cell unit can't stand on a point hugging a cliff or wall (pushOutOfBlocked would put it
+        // back every tick): end on the nearest free 2x2 block instead
+        if (big && (!target || target.kind === 'unit') && path.length) {
+          const last = path[path.length - 1];
+          if (blockedOverlap(grid, last[0], last[1], u.r) > 0.05) {
+            const nb = grid.nearestFreeBlock(last[0], last[1], 3);
+            if (nb) path[path.length - 1] = [nb[0] + 1, nb[1] + 1];
+          }
+        }
         // for structures: final point = closest point on footprint edge outside it
         // (not for partial paths of big units: they stop at the closest reachable spot)
         if (target && target.kind !== 'unit' && path.length && !path.partial) {
@@ -109,6 +125,7 @@ export function moveTo(world, u, gx, gy, opts = {}) {
           forceRepath: false,
           partial: !!path.partial,
           made: world.tick,
+          direct,
         };
       } else {
         // out of budget this tick: move straight toward goal
@@ -118,6 +135,14 @@ export function moveTo(world, u, gx, gy, opts = {}) {
         return 'moving';
       }
     }
+  }
+
+  // survival: chasing a unit in a straight line, aim at where it is now rather than where it was
+  // when the path was made, so a faster chaser really closes in on a fleeing unit
+  if (survival && target && target.kind === 'unit' && nav.direct && nav.idx === 0 && directOk(grid, u, target.x, target.y, big)) {
+    nav.path[0] = [target.x, target.y];
+    nav.gx = target.x;
+    nav.gy = target.y;
   }
 
   // follow path
@@ -187,6 +212,11 @@ export function moveTo(world, u, gx, gy, opts = {}) {
     }
   }
   return 'moving';
+}
+
+// A straight walk from u to (x, y) is clear (2-cell units must also fit at the end point).
+function directOk(grid, u, x, y, big) {
+  return grid.lineWalkableFat(u.x, u.y, x, y, u.r) && (!big || blockedOverlap(grid, x, y, u.r) <= 0.05);
 }
 
 function stepToward(world, u, tx, ty, step) {
@@ -261,7 +291,11 @@ export function updateUnit(world, u) {
   u.moving = false;
   u.ghost = false;
   u.engaged = 0;
-  if (u.cooldown > 0) u.cooldown = Math.max(0, u.cooldown - DT);
+  if (u.strikeCooldown) {
+    // survival heroes: the cooldown may end up to one tick below zero; startSwing carries that
+    // overshoot into the next strike (exact strike rate). It is dropped if no strike follows.
+    u.cooldown = u.cooldown > STRIKE_EPS ? u.cooldown - DT : 0;
+  } else if (u.cooldown > 0) u.cooldown = Math.max(0, u.cooldown - DT);
   if (u.lungeCd > 0) u.lungeCd = Math.max(0, u.lungeCd - DT);
   if (u.lunging > 0) u.lunging = Math.max(0, u.lunging - DT);
   if (u.warping > 0) {
@@ -338,7 +372,7 @@ function idle(world, u) {
   if (u.target) {
     const t = world.byId.get(u.target);
     const leash = Math.hypot(u.x - u.guard.x, u.y - u.guard.y);
-    if (!t || !canTarget(world, u, t) || (leash > 10 && edgeDist(u, t) > 1)) {
+    if (!t || !canTarget(world, u, t) || untouchable(world, t) || gaveUpOn(world, u, t) || (leash > 10 && edgeDist(u, t) > 1)) {
       u.target = null;
       u.nav = null;
     } else {
@@ -385,7 +419,9 @@ function orderMove(world, u, o) {
 
 function orderFollow(world, u, o) {
   const t = world.byId.get(o.target);
-  if (!t || t.dead) {
+  // survival: stop following an enemy that slipped into the fog or cloaked
+  const lost = t && world.mode === 'survival' && t.owner >= 0 && world.areEnemies(u.owner, t.owner) && !world.isVisibleTo(t, u.owner);
+  if (!t || t.dead || lost) {
     endOrder(world, u);
     return;
   }
@@ -402,10 +438,15 @@ function orderAttack(world, u, o) {
   }
   if (t && !t.dead && t.kind !== 'unit' && t.hp !== undefined && !world.isVisibleTo(t, u.owner)) {
     // structure hidden in the fog: walk to it, then attack once it comes into view
+    // (survival: only structures the team has seen before; ids alone must not reveal a base)
+    if (world.mode === 'survival' && !world.seenByTeam(t, u.owner)) {
+      endOrder(world, u);
+      return;
+    }
     if (moveTo(world, u, t.x, t.y, { target: t, tolerance: u.def.weapon.range + 0.02, failOk: true }) === 'failed') endOrder(world, u);
     return;
   }
-  if (!t || !canTarget(world, u, t, true)) {
+  if (!t || !canTarget(world, u, t, true) || gaveUpOn(world, u, t)) {
     endOrder(world, u);
     return;
   }
@@ -417,7 +458,7 @@ function orderHold(world, u) {
   u.nav = null;
   if (isWorker(u) || !u.def.weapon) return;
   let t = u.target ? world.byId.get(u.target) : null;
-  if (!t || !canTarget(world, u, t) || edgeDist(u, t) > u.def.weapon.range + 0.15) {
+  if (!t || !canTarget(world, u, t) || untouchable(world, t) || edgeDist(u, t) > u.def.weapon.range + 0.15) {
     t = acquireTarget(world, u, u.def.weapon.range + 0.15);
     u.target = t ? t.id : null;
   }
@@ -431,7 +472,7 @@ function orderAttackMove(world, u, o) {
     return;
   }
   let t = u.target ? world.byId.get(u.target) : null;
-  if (t && !canTarget(world, u, t)) {
+  if (t && (!canTarget(world, u, t) || untouchable(world, t) || gaveUpOn(world, u, t))) {
     t = null;
     u.target = null;
     u.nav = null;
@@ -466,6 +507,13 @@ function orderAttackMove(world, u, o) {
   }
 }
 
+// survival: a structure this unit could not reach (no path, nothing in the way to hit) is left
+// alone for a few seconds so auto-targeting picks something else.
+const GIVE_UP_TICKS = 100;
+function gaveUpOn(world, u, t) {
+  return !!u.giveUp && u.giveUp.id === t.id && u.giveUp.until > world.tick;
+}
+
 // Chase and attack a target. allowMove=false for hold position.
 export function engage(world, u, t, allowMove) {
   const w = u.def.weapon;
@@ -491,6 +539,30 @@ export function engage(world, u, t, allowMove) {
     world.emit({ e: 'lunge', id: u.id, t: t.id });
   }
   moveTo(world, u, t.x, t.y, { target: t, tolerance: w.range + 0.02 });
+  // survival: a 2-cell unit that cannot reach its target (walled in) hits what blocks it
+  if (world.mode === 'survival' && u.nav && u.nav.partial && u.nav.idx >= u.nav.path.length) {
+    let best = null;
+    let bd = w.range + 0.3;
+    for (const b of world.buildings) {
+      if (b.dead || b.owner < 0 || !world.areEnemies(u.owner, b.owner) || untouchable(world, b)) continue;
+      const db = edgeDist(u, b);
+      if (db <= bd) {
+        bd = db;
+        best = b;
+      }
+    }
+    if (best) {
+      const [cx, cy] = closestPoint(best, u.x, u.y);
+      u.targetFacing = Math.atan2(cy - u.y, cx - u.x);
+      u.engaged = best.id;
+      startSwing(world, u, best);
+    } else if (t.kind !== 'unit') {
+      // a structure out of reach (e.g. behind a cliff) with nothing to break through: give up on it
+      u.giveUp = { id: t.id, until: world.tick + GIVE_UP_TICKS };
+      u.target = null;
+      u.nav = null;
+    }
+  }
 }
 
 // ---------------------------------------------------------------- gathering
@@ -711,12 +783,22 @@ function orderMine(world, u, o) {
   }
   if (o.phase !== 'mining') {
     const r = moveTo(world, u, res.x, res.y, { target: res, tolerance: 0.35, failOk: true });
-    if (r === 'moving') return;
-    if (r === 'failed' && edgeDist(u, res) > 1.2) {
+    // a field that got walled in: its path ends short of it (the miner would push at the walls
+    // forever). Checked once per new path with a full search (A* may also stop at its node budget).
+    let blocked = false;
+    const nav = u.nav;
+    if (nav && nav.path && nav.path.reached === false && !nav.reachChecked) {
+      nav.reachChecked = true;
+      blocked = !world.minerReaches(u, res);
+    }
+    if (r === 'moving' && !blocked) return;
+    if ((r === 'failed' || blocked) && edgeDist(u, res) > 1.2) {
       u.mining = 0;
+      world.minerAvoid(u, res); // pick another field (idle() re-assigns the miner)
       endOrder(world, u);
       return;
     }
+    if (r === 'moving') return;
     u.nav = null;
     o.phase = 'mining';
     o.timer = 0;

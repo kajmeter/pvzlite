@@ -263,6 +263,9 @@ export function generateMap(desc) {
   }
 
   // 5. flags
+  // Survival maps: ramps are buildable (a 2x2 Wall in the middle of a 4-wide ramp leaves 1-cell
+  // gaps that Shapers fit through but the 2-cell-wide Lancer does not).
+  const survival = desc.mode === 'survival';
   const border = desc.border || 2;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -271,7 +274,7 @@ export function generateMap(desc) {
       const edge = x < border || y < border || x >= W - border || y >= H - border;
       if (!edge && !cliff[i] && !blocked[i]) {
         f |= CELL_PATHABLE;
-        if (!isRamp[i]) f |= CELL_BUILDABLE;
+        if (!isRamp[i] || survival) f |= CELL_BUILDABLE;
       }
       if (isRamp[i]) f |= CELL_RAMP;
       if (cliff[i]) f |= CELL_CLIFF;
@@ -279,7 +282,7 @@ export function generateMap(desc) {
     }
   }
   // Cells next to ramps are not buildable (keeps ramps from being walled entirely by mistake)
-  for (let y = 1; y < H - 1; y++) {
+  for (let y = 1; y < H - 1 && !survival; y++) {
     for (let x = 1; x < W - 1; x++) {
       const i = y * W + x;
       if (!(flags[i] & CELL_BUILDABLE)) continue;

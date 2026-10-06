@@ -46,6 +46,8 @@ export function stamp(map, vis, explored, x, y, r, vl) {
 
 export function updateVision(world) {
   const map = world.map;
+  // survival: structures placed since the last update count as seen if the old vision covered them
+  if (world.mode === 'survival') markSeenStructures(world);
   for (const t of world.teamIds) world.vision[t].fill(0);
   for (const u of world.units) {
     if (u.dead || u.owner < 0) continue;
@@ -58,7 +60,7 @@ export function updateVision(world) {
     const team = world.players[b.owner].team;
     const vl = viewerLevel(map, b.x, b.y);
     // survival Lancer Detector sees over cliffs (it is a tall tower)
-    stamp(map, world.vision[team], world.explored[team], b.x, b.y, b.built ? b.def.sight : 4, b.type === 'detector' && b.built ? 99 : vl);
+    stamp(map, world.vision[team], world.explored[team], b.x, b.y, b.built ? b.sight || b.def.sight : 4, b.type === 'detector' && b.built ? 99 : vl);
   }
   // survival: active Scans reveal a circle (high ground included) for the scanning team
   if (world.mode === 'survival' && world.survival) {
@@ -71,6 +73,33 @@ export function updateVision(world) {
     if (n.type !== 'beacon' || n.dead) continue;
     for (const team of n.holders) {
       stamp(map, world.vision[team], world.explored[team], n.x, n.y, BEACON_SIGHT, 99);
+    }
+  }
+  if (world.mode === 'survival') markSeenStructures(world);
+}
+
+// Same footprint rule as World.isVisibleTo: any corner or the centre cell visible.
+function footprintVisible(vis, W, b) {
+  return (
+    vis[b.by * W + b.bx] ||
+    vis[b.by * W + b.bx + b.w - 1] ||
+    vis[(b.by + b.h - 1) * W + b.bx] ||
+    vis[(b.by + b.h - 1) * W + b.bx + b.w - 1] ||
+    vis[Math.floor(b.y) * W + Math.floor(b.x)]
+  );
+}
+
+// survival: remembers which teams have seen each structure (bit `1 << team` of b.seenMask), so an
+// attack order into the fog only works on structures the attacker's team knows about.
+function markSeenStructures(world) {
+  const W = world.map.width;
+  for (const b of world.buildings) {
+    if (b.dead || b.owner < 0) continue;
+    const own = world.players[b.owner].team;
+    for (const t of world.teamIds) {
+      const bit = 1 << t;
+      if (t === own || (b.seenMask & bit) || !world.vision[t]) continue;
+      if (footprintVisible(world.vision[t], W, b)) b.seenMask = (b.seenMask || 0) | bit;
     }
   }
 }

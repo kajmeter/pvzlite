@@ -27,7 +27,7 @@ import {
   requirementText,
 } from '../data/survival.js';
 import { clearOrders } from './behavior.js';
-import { applyDamage } from './combat.js';
+import { applyDamage, untouchable } from './combat.js';
 import { pointEdgeDist, rectDist } from './geom.js';
 
 export const SHAPER_TEAM = 1;
@@ -36,6 +36,11 @@ export const LANCER_TEAM = 2;
 const T = (s) => Math.round(s * TICK_RATE);
 const UPGRADABLE = { generator: GENERATOR_LEVELS, wall: WALL_LEVELS, market: MARKET_LEVELS, turret: TURRET_LEVELS };
 const isLancerType = (u) => u.type === 'lancerHero' || u.type === 'hunter';
+// Command input is untrusted: only own keys of the data tables count ('__proto__', 'toString', ...
+// must never resolve to Object.prototype members).
+const hasKey = (table, key) => typeof key === 'string' && Object.hasOwn(table, key);
+export const isSurvivalStructure = (type) => type !== 'shop' && hasKey(SURVIVAL_BUILDINGS, type) && hasKey(BUILDINGS, type);
+const PACES = [1, 2, 4];
 
 export function gameTime(world) {
   return world.tick / TICK_RATE;
@@ -54,7 +59,7 @@ function normRole(r) {
 
 export function setupSurvival(world, opts) {
   const map = world.map;
-  const pace = Number.isFinite(opts.pace) && opts.pace > 0 ? Math.min(16, opts.pace) : 1;
+  const pace = PACES.includes(Number(opts.pace)) ? Number(opts.pace) : 1; // spec section 1: 1, 2 or 4
   const duration = Number.isFinite(opts.duration) && opts.duration > 0 ? opts.duration : 0;
   world.options = { ...opts, pace, duration };
   const sv = (world.survival = {
@@ -141,6 +146,7 @@ function initBuilding(b, type, level) {
   b.upgradeTotal = 0;
   b.upgradeTo = 0;
   b.upgradeCost = null;
+  b.pausedUpgrade = null; // an upgrade interrupted by a salvage, resumed if the salvage is cancelled
   b.salvaging = 0;
   b.ceaseFire = false;
   b.dr = 0;
@@ -333,14 +339,15 @@ function stepPickups(world) {
       if (p.eliminated) continue;
       const h = heroOf(world, p);
       if (!h || h.stasisUntil > tick) continue;
-      if (k.type === 'gasBonus' && h.type === 'builder' && Math.hypot(h.x - k.x, h.y - k.y) <= SURVIVAL.gasBonusPickup + h.r) {
+      // spec §2: centre distance <= 1.2 (gas bonus, Shaper hero) / <= 1.5 (pallet, Lancer / Hunters)
+      if (k.type === 'gasBonus' && h.type === 'builder' && Math.hypot(h.x - k.x, h.y - k.y) <= SURVIVAL.gasBonusPickup) {
         const amt = k.amount * pace;
         p.gas += amt;
         p.stats.gasEarned += amt;
         world.emit({ e: 'pickup', type: k.type, owner: p.id, amount: amt, x: k.x, y: k.y, id: k.id });
         return false;
       }
-      if (k.type === 'pallet' && isLancerType(h) && Math.hypot(h.x - k.x, h.y - k.y) <= SURVIVAL.palletPickup + h.r) {
+      if (k.type === 'pallet' && isLancerType(h) && Math.hypot(h.x - k.x, h.y - k.y) <= SURVIVAL.palletPickup) {
         p.minerals += k.amount;
         p.stats.mineralsEarned += k.amount;
         world.emit({ e: 'pickup', type: k.type, owner: p.id, amount: k.amount, x: k.x, y: k.y, id: k.id });
@@ -494,11 +501,12 @@ export function isDetected(world, u, team) {
 // ================================================================== costs & placement
 
 export function buildCost(type, level = 1) {
+  if (!isSurvivalStructure(type)) return { gas: 0, minerals: 0 };
   if (type === 'autoMine') {
     const L = AUTOMINE_LEVELS[level - 1];
     return L ? { gas: 0, minerals: L.minerals } : { gas: 0, minerals: 0 };
   }
-  const tbl = UPGRADABLE[type];
+  const tbl = hasKey(UPGRADABLE, type) ? UPGRADABLE[type] : null;
   if (tbl) return cumulativeCost(tbl, level);
   const sb = SURVIVAL_BUILDINGS[type];
   return sb && sb.cost ? { gas: sb.cost.gas, minerals: sb.cost.minerals } : { gas: 0, minerals: 0 };
@@ -510,7 +518,7 @@ export function buildTimeOf(type, level = 1) {
   if (type === 'wall') return WALL_LEVELS[level - 1]?.time ?? 2;
   if (type === 'market') return MARKET_LEVELS[0].time;
   if (type === 'turret') return TURRET_LEVELS[0].time;
-  return SURVIVAL_BUILDINGS[type]?.buildTime ?? 5;
+  return isSurvivalStructure(type) ? SURVIVAL_BUILDINGS[type].buildTime ?? 5 : 5;
 }
 
 // Max HP / shield / damage reduction of a structure at a level
@@ -554,9 +562,8 @@ function validLevel(type, level) {
 
 export function canPlaceSurvival(world, owner, type, bx, by, level = 1) {
   const p = world.players[owner];
-  const sb = SURVIVAL_BUILDINGS[type];
   level = Math.floor(Number(level) || 1);
-  if (!sb || type === 'shop' || !BUILDINGS[type]) return { ok: false, reason: 'Unknown structure' };
+  if (!isSurvivalStructure(type)) return { ok: false, reason: 'Unknown structure' };
   if (!p || p.role !== 'shaper' || p.form !== 'shaper' || !p.alive) return { ok: false, reason: 'Only Shapers can build' };
   if (!validLevel(type, level)) return { ok: false, reason: 'Invalid level' };
   // requirements
@@ -599,7 +606,7 @@ export function canPlaceSurvival(world, owner, type, bx, by, level = 1) {
 export function placeSurvival(world, owner, type, bx, by, builder, level = 1) {
   level = Math.floor(Number(level) || 1);
   const chk = canPlaceSurvival(world, owner, type, bx, by, level);
-  const s = BUILDINGS[type] ? BUILDINGS[type].size : 2;
+  const s = isSurvivalStructure(type) ? BUILDINGS[type].size : 2;
   if (!chk.ok) {
     world.error(owner, chk.reason, bx + s / 2, by + s / 2);
     return chk;
@@ -637,6 +644,8 @@ function setTurretStats(b) {
   b.weaponDamage = L.damage;
   b.weaponRange = L.range;
   b.weaponCooldown = L.cooldown;
+  // a turret sees at least as far as it shoots (range from its edge + half its size + a Lancer radius)
+  b.sight = Math.max(b.def.sight, Math.ceil(L.range + b.w / 2 + 1));
 }
 
 // ================================================================== upgrades & salvage
@@ -703,7 +712,8 @@ export function startSalvage(world, pid, b) {
   }
   if (!b.built) return cancelConstruction(world, b);
   if (b.salvaging > 0) return false;
-  // a running upgrade stops; its cost is already part of `invested`
+  // a running upgrade stops (its cost is part of `invested`); cancelling the salvage resumes it
+  b.pausedUpgrade = b.upgrading > 0 ? { left: b.upgrading, total: b.upgradeTotal, to: b.upgradeTo, cost: b.upgradeCost } : null;
   b.upgrading = 0;
   b.upgradeTotal = 0;
   b.upgradeTo = 0;
@@ -713,9 +723,34 @@ export function startSalvage(world, pid, b) {
   return true;
 }
 
+// Paid Depot / Library queue entries (miners, Wardens) are refunded with the building.
+function queueRefund(b) {
+  let gas = 0;
+  let minerals = 0;
+  for (const q of b.queue || []) {
+    gas += q.gas || 0;
+    minerals += q.minerals || 0;
+  }
+  if (b.queue) b.queue.length = 0;
+  return { gas, minerals };
+}
+
+function stopSalvage(b) {
+  b.salvaging = 0;
+  const pu = b.pausedUpgrade;
+  b.pausedUpgrade = null;
+  if (!pu) return;
+  b.upgrading = pu.left;
+  b.upgradeTotal = pu.total;
+  b.upgradeTo = pu.to;
+  b.upgradeCost = pu.cost;
+}
+
 function finishSalvage(world, b) {
   const p = world.players[b.owner];
-  const { gas, minerals } = b.invested;
+  const q = queueRefund(b);
+  const gas = b.invested.gas + q.gas;
+  const minerals = b.invested.minerals + q.minerals;
   p.gas += gas;
   p.minerals += minerals;
   p.stats.spent -= gas + minerals;
@@ -733,9 +768,10 @@ function finishSalvage(world, b) {
 
 function cancelConstruction(world, b) {
   const p = world.players[b.owner];
-  p.gas += b.invested.gas;
-  p.minerals += b.invested.minerals;
-  p.stats.spent -= b.invested.gas + b.invested.minerals;
+  const q = queueRefund(b);
+  p.gas += b.invested.gas + q.gas;
+  p.minerals += b.invested.minerals + q.minerals;
+  p.stats.spent -= b.invested.gas + b.invested.minerals + q.gas + q.minerals;
   world.emit({ e: 'cancelled', id: b.id, owner: b.owner, type: b.type });
   world.kill(b, null, true);
   return true;
@@ -785,7 +821,7 @@ export function updateSurvivalBuilding(world, b) {
       break;
     case 'depot':
     case 'library':
-      stepQueue(world, b, oc);
+      stepQueue(world, b); // Overcharge does not speed up training (spec section 6)
       break;
     default:
       break;
@@ -812,7 +848,8 @@ function turretFire(world, b, oc) {
   const half = b.w / 2;
   const near = world.hash.query(b.x, b.y, b.weaponRange + half + 2, world._q);
   for (const u of near) {
-    if (u.dead || u.hidden || !world.areEnemies(b.owner, u.owner)) continue;
+    // units in stasis / invulnerable take no damage: shoot something else
+    if (u.dead || u.hidden || !world.areEnemies(b.owner, u.owner) || untouchable(world, u)) continue;
     const d = pointEdgeDist(b.x, b.y, u) - half;
     if (d > b.weaponRange || d >= bd) continue;
     if (!world.isVisibleTo(u, b.owner)) continue;
@@ -831,10 +868,10 @@ function turretFire(world, b, oc) {
   applyDamage(world, best, dmg, b);
 }
 
-function stepQueue(world, b, oc) {
+function stepQueue(world, b) {
   const item = b.queue[0];
   if (!item || b.salvaging > 0) return;
-  item.progress += DT * oc;
+  item.progress += DT;
   if (item.progress < item.time - 1e-9) return;
   b.queue.shift();
   const u = world.spawnFromBuilding(b, item.id);
@@ -874,21 +911,52 @@ function fieldLoad(world, except) {
   return load;
 }
 
-// Sends a miner to the nearest field with room (gold preferred for tiers 1-4)
+const MINER_PATH_TRIES = 4; // fields checked for reachability per assignment
+
+// A miner remembers mineral fields it could not reach (walled in) and skips them for a while.
+export function minerAvoid(world, u, r) {
+  if (!u.avoidFields) u.avoidFields = new Map();
+  u.avoidFields.set(r.id, world.tick + T(SURVIVAL.minerAvoidTime));
+}
+
+// Full search (no node budget): can the miner walk next to field r?
+export function minerReaches(world, u, r) {
+  const path = world.grid.findPath(u.x, u.y, r.x, r.y, {
+    rect: { x: r.bx, y: r.by, w: r.w, h: r.h },
+    radius: u.r,
+    pad: 1,
+    maxNodes: world.map.width * world.map.height,
+  });
+  return !!path && path.reached !== false;
+}
+
+// Sends a miner to the nearest reachable field with room. Tiers 1-4 prefer gold (double yield),
+// but only when it is at most SURVIVAL.minerGoldPreference cells farther than a normal field, so
+// miners of a depot in a far base mine its own grove instead of walking out to the centre.
 export function assignMiner(world, u, preferred = null) {
   const load = fieldLoad(world, u);
-  let best = preferred && !preferred.dead && (load.get(preferred.id) || 0) < SURVIVAL.minersPerField ? preferred : null;
-  if (!best) {
-    let bs = Infinity;
+  const tick = world.tick;
+  const open = (r) =>
+    r && !r.dead && r.type === 'crystal' && (load.get(r.id) || 0) < SURVIVAL.minersPerField && !(u.avoidFields?.get(r.id) > tick);
+  let cands;
+  if (open(preferred)) cands = [preferred];
+  else {
+    const scored = [];
     for (const r of world.resources) {
-      if (r.dead || r.type !== 'crystal' || (load.get(r.id) || 0) >= SURVIVAL.minersPerField) continue;
+      if (!open(r)) continue;
       const d = Math.hypot(r.x - u.x, r.y - u.y);
-      const score = d - (r.rich && u.tier <= 4 && d < 45 ? 1000 : 0);
-      if (score < bs) {
-        bs = score;
-        best = r;
-      }
+      scored.push({ r, s: d - (r.rich && (u.tier || 1) <= 4 ? SURVIVAL.minerGoldPreference : 0) });
     }
+    scored.sort((a, b) => a.s - b.s || a.r.id - b.r.id);
+    cands = scored.slice(0, MINER_PATH_TRIES).map((k) => k.r);
+  }
+  let best = null;
+  for (const r of cands) {
+    if (minerReaches(world, u, r)) {
+      best = r;
+      break;
+    }
+    minerAvoid(world, u, r);
   }
   if (!best) return false;
   clearOrders(world, u);
@@ -939,10 +1007,11 @@ function pickAbilities(world, p, a) {
 }
 
 function abilityDef(p, id) {
-  if (p.form === 'shaper') return p.abilities.includes(id) ? SHAPER_ABILITIES[id] : null;
-  if (p.form === 'lancer') return LANCER_ABILITIES[id] || null;
-  if (p.form === 'hunter') return HUNTER_ABILITY_IDS.includes(id) ? LANCER_ABILITIES[id] : null;
-  if (p.form === 'spirit') return SPIRIT_ABILITIES[id] || null;
+  if (typeof id !== 'string') return null;
+  if (p.form === 'shaper') return p.abilities.includes(id) && hasKey(SHAPER_ABILITIES, id) ? SHAPER_ABILITIES[id] : null;
+  if (p.form === 'lancer') return hasKey(LANCER_ABILITIES, id) ? LANCER_ABILITIES[id] : null;
+  if (p.form === 'hunter') return HUNTER_ABILITY_IDS.includes(id) && hasKey(LANCER_ABILITIES, id) ? LANCER_ABILITIES[id] : null;
+  if (p.form === 'spirit') return hasKey(SPIRIT_ABILITIES, id) ? SPIRIT_ABILITIES[id] : null;
   return null;
 }
 
@@ -1076,7 +1145,7 @@ function useAbility(world, pid, c) {
     }
     case 'barrierField': {
       if (!hasPoint) return false;
-      if (Math.hypot(x - hero.x, y - hero.y) > def.range + 1) {
+      if (Math.hypot(x - hero.x, y - hero.y) > def.range) {
         world.error(pid, 'Out of range', x, y);
         return false;
       }
@@ -1211,7 +1280,7 @@ const itemValue = (id) => {
 
 function buyItem(world, pid, itemId) {
   const p = world.players[pid];
-  const it = SHOP_ITEMS[itemId];
+  const it = hasKey(SHOP_ITEMS, itemId) ? SHOP_ITEMS[itemId] : null;
   if (!it) {
     world.error(pid, 'Unknown item');
     return false;
@@ -1319,11 +1388,16 @@ function trade(world, pid, op, lots) {
     }
     done++;
   }
-  if (done) world.emit({ e: 'trade', owner: pid, op: op === 'buy' ? 'buy' : 'sell', lots: done, price: sv.price });
+  if (done) world.emit({ e: 'trade', owner: pid, op, lots: done, price: sv.price });
   return done > 0;
 }
 
 // ================================================================== commands
+
+// An enemy entity the player can't see right now (fog / cloak).
+function hiddenEnemy(world, pid, t) {
+  return t.owner >= 0 && world.areEnemies(pid, t.owner) && !world.isVisibleTo(t, pid);
+}
 
 function ownBuilding(world, pid, id) {
   const b = world.byId.get(id);
@@ -1343,6 +1417,10 @@ export function survivalCommand(world, pid, c, units) {
       const hero = units.find((u) => u.type === 'builder') || heroOf(world, p);
       if (!hero || hero.type !== 'builder') return true;
       const type = c.building;
+      if (!isSurvivalStructure(type)) {
+        world.error(pid, 'Unknown structure');
+        return true;
+      }
       const level = Math.floor(Number(c.level) || 1);
       const bx = Math.floor(Number(c.bx) || 0);
       const by = Math.floor(Number(c.by) || 0);
@@ -1376,7 +1454,7 @@ export function survivalCommand(world, pid, c, units) {
       const b = ownBuilding(world, pid, c.id ?? c.building);
       if (!b) return true;
       if (!b.built) cancelConstruction(world, b);
-      else if (b.salvaging > 0) b.salvaging = 0;
+      else if (b.salvaging > 0) stopSalvage(b);
       else if (b.upgrading > 0) {
         const cost = b.upgradeCost || { gas: 0, minerals: 0 };
         p.gas += cost.gas;
@@ -1442,7 +1520,7 @@ export function survivalCommand(world, pid, c, units) {
       return true;
     }
     case 'trade':
-      trade(world, pid, c.op, Number(c.lots) || 1);
+      if (c.op === 'buy' || c.op === 'sell') trade(world, pid, c.op, Number(c.lots) || 1);
       return true;
     case 'ability':
       useAbility(world, pid, c);
@@ -1495,15 +1573,21 @@ export function survivalCommand(world, pid, c, units) {
     }
     case 'gather': {
       const t = world.byId.get(c.target);
+      if (!t || t.dead || hiddenEnemy(world, pid, t) || !Number.isFinite(t.x) || !Number.isFinite(t.y)) return true;
       for (const u of units) {
-        if (u.type === 'miner' && t && t.type === 'crystal') {
+        if (u.type === 'miner' && t.type === 'crystal') {
           if (!assignMiner(world, u, t)) world.error(pid, 'No free mineral field');
-        } else if (t) {
+        } else {
           clearOrders(world, u);
           u.orders.push({ type: 'move', x: t.x, y: t.y });
         }
       }
       return true;
+    }
+    case 'follow': {
+      // entity ids are public (every snapshot lists the heroes' ids): never chase an enemy you can't see
+      const t = world.byId.get(c.target);
+      return !!t && hiddenEnemy(world, pid, t);
     }
     // classic-only commands are ignored in survival
     case 'train':

@@ -496,7 +496,75 @@ low, use Cloak/Return to escape, trade minerals for gas when capped.
 
 ## 14. Implementation notes (filled in by the implementers)
 
-<!-- protocol row layout, deviations and open questions are documented here -->
+### 14.1 Snapshot layout (`src/shared/net/protocol.js`, `PROTOCOL_VERSION` still 1)
+
+`TYPES` is append-only; survival types were appended after the old ones: `generator, wall, market,
+depot, autoMine, library, detector, shop, lancerHero, spirit, miner, warden` (old ids keep their index).
+Times are seconds (2 decimals); "left" = seconds remaining, 0 when inactive.
+
+- **Unit row** (unchanged 0–15): `[id, type, owner, x, y, facing, hp, barrier, attackAnim, lunging,
+  carry, mining, hidden, warping, warpTotal, own?[idle, lungeAutocast]:0, S]` where `S` (index 16) is
+  `0` for classic units and for survival units:
+  `[maxHp, maxBarrier, tier, stasisLeft, cloaked 0|1, invulnerable 0|1, immuneLeft, decayLeft,
+  damage, strikeCooldown, dr, regen, speed (effective, incl. Swiftness/Cloak), sight]`.
+- **Building row** (unchanged 0–13): `[id, type, owner, bx, by, hp, barrier, built, progress, phase,
+  powered, beam, overclock, own?[energy, warpCd, transform, queue, rally, ventAmount]:0, S]`; queue
+  entries are `[kind 0 unit|1 research, id ('miner'|'warden'), progress, time, level|tier]`. `S` (index 14):
+  `[maxHp, maxBarrier, level, upgradingLeft, upgradeTotal, salvagingLeft, ceaseFire 0|1, aim (rad), dr,
+  weaponDamage, weaponRange, weaponCooldown, overchargeLeft, invulnLeft, buildTime, upgradeTo]`.
+  The Shop (owner -1) is always included.
+- **players[i]** in survival: `{ id, eliminated, role, form, team, alive 0|1, heroId, respawnAt (tick|-1),
+  pendingForm (tick|-1), items (Lancer/Hunter only, else []), stats: { fed, shapersKilled, deaths } }`;
+  own entry adds `gas, minerals` (2 decimals), `abilities`, `cooldowns` (`{ id: secondsLeft }`, only
+  >0), `genLevel` (0 = no generator), `minersCount` (alive + queued). Old `level/lives/hunterUp/essence/
+  sprintCd/revealCd` are gone.
+- **survival** global: `{ phase 'pregame'|'hunt', lancerIn, unlockIn, elapsed, timeLeft (-1 = no limit),
+  price, reason, pace, shopId, pickups, scans, fields }` with
+  `pickups = [[id, kind 0 gasBonus|1 pallet, x, y, amount, expiresIn (-1 never)]]` (only those on cells
+  the player's team sees), `scans = [[x, y, r, left]]` (own team only),
+  `fields = [[id, bx, by, left, owner]]` (all active Barrier Fields; 2×2 blockers the client must treat
+  as unpathable).
+- **Events**: global → `lancerArrives, unlock, shaperDown, lancerDown, hunterDown, spiritDown, form,
+  respawn`; owner-only → `upgradeStart, upgraded, salvageStart, salvaged, cancelled, trade, bought, sold,
+  pickup, share (owner = receiver), exchange, abilitiesPicked, mined, buildStart, buildDone, trained,
+  error, alert`; caster's team or anyone seeing the point → `ability, scan`; by visibility →
+  `bolt, strike, hit, death, pickupSpawn, gameOver`.
+
+### 14.2 Decisions where the spec/wiki was silent
+
+- Turret upgrade time is 5 s for target levels ≥ 11 (`TURRET_LEVELS[i].time`), 4 s below.
+- *Decay* doubles the strike period. Strikes faster than one per tick (Final Blade) are folded into a
+  damage multiplier so DPS stays exact at 20 ticks/s.
+- Passive income of the Lancer starts when the hero spawns (0:40). Pallets are **not** multiplied by
+  pace (only the listed incomes are).
+- Nothing can be built within `SURVIVAL.shopClearance = 2` cells of the Shop footprint (keeps the
+  Lancer spawn free). Shapers spawn 6–9 cells from the Shop centre, so "Generator at the Shop" works.
+- Buying/selling is also allowed while the player has no hero on the field (pregame Lancer, Hunter
+  waiting to respawn). Gas exchange works anywhere.
+- Gold lock uses the rectangle distance between the footprint and any rich field (< 10 cells).
+- Miners are "ghost" units (no unit collisions); `gather { target }` re-assigns a miner to a field
+  (error "No free mineral field" if it already has 3).
+- Salvaging a building that is mid-upgrade stops the upgrade (its cost is part of `invested`, so it is
+  refunded too). Generators keep producing while being salvaged; turrets stop firing.
+- `cancel { id }`: under construction → full refund; salvaging → stop salvage; upgrading → refund that
+  upgrade; Depot/Library → remove the last queued item (refund). `salvage` on an unfinished structure
+  = cancel.
+- Blink/Far Blink targets beyond 8 cells are clamped to 8. Stasis/Decay accept `target` or a point
+  (nearest enemy Lancer/Hunter within 3 cells). Barrier Field occupies the 2×2 block
+  `(round(x)-1, round(y)-1)`; it is refused next to a spell-immune enemy, and Lancers/Hunters within
+  3.5 cells get spell immunity when it ends.
+- AI Shapers that die after 5:00 become Spirits immediately. A human gets `pendingForm` (15 s).
+- A unit chasing a target it cannot reach (partial clearance-2 path) re-paths at most once per second.
+- Maps: `hunterSlots` is 1; `builderSpawns` are now only Spirit respawn points (≥ 10 per map).
+  Every ramp is axis-aligned with an integer centre line so it rasterises to exactly 4 cells
+  (`tests/maps.test.js` checks a wall in the middle stops clearance-2 paths but not Shapers).
+
+### 14.3 Open questions / not implemented
+
+- Repairing walls (the wiki mentions Spirits helping "repair walls") — no repair exists yet.
+- Experience / ranking, `-zoom`, vote-kick and other chat commands of PvZ2 are out of scope.
+- Shared vision between Hunters and the Lancer works through the team (team 2); Hunters keep their
+  own minerals/items.
 
 ## 15. Module API (contract between sim, tests, AI and client)
 

@@ -177,6 +177,7 @@ export class SurvivalAI {
       if (e.dead || e.owner < 0 || !w.areEnemies(this.pid, e.owner)) continue;
       if (e.kind === 'unit' && e.type !== 'builder' && e.type !== 'miner') continue;
       if (!w.isVisibleTo(e, this.pid)) continue;
+      if (hero.giveUp && hero.giveUp.id === e.id && hero.giveUp.until > w.tick) continue; // out of reach
       const d = Math.hypot(e.x - hero.x, e.y - hero.y);
       if (d < bd) {
         bd = d;

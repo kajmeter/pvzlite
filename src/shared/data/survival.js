@@ -38,6 +38,8 @@ export const SURVIVAL = {
   spiritMinerBonus: 0.25,
   overchargeFactor: 1.3,
   minerOverchargeRadius: 3,
+  minerGoldPreference: 10, // pvzlite: tier 1-4 miners take a gold field up to this many cells farther than a normal one
+  minerAvoidTime: 30, // s: a miner skips a mineral field it could not reach for this long
   detectorRange: 20,
   shaperSpawnRing: [6, 9],
   lancerRegenDelay: 0, // regen always works (wiki: potions regenerate in and out of combat)

@@ -81,7 +81,9 @@ UNITS.builder = survivalUnit({
   attributes: ['light', 'mechanical'],
   scale: 1.2,
 });
-const LANCER_WEAPON = { damage: 5, hits: 1, cooldown: 1.0, range: 0.2, windup: 0.15, hitInterval: 0, upgradePerLevel: 0 };
+// vsShaper: damage multiplier against the Shaper hero (20 HP + 20 barrier): spec section 3 / the
+// wiki say a Shaper dies to ~1-2 early strikes, so a 5-damage strike hits a Shaper for 20.
+const LANCER_WEAPON = { damage: 5, hits: 1, cooldown: 1.0, range: 0.2, windup: 0.15, hitInterval: 0, upgradePerLevel: 0, vsShaper: 4 };
 UNITS.lancerHero = survivalUnit({
   id: 'lancerHero',
   name: 'Lancer',

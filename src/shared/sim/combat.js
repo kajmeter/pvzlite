@@ -89,23 +89,38 @@ export function applySurvivalDamage(world, target, amount, attacker) {
 }
 
 export function weaponDamage(world, u, target) {
-  if (u.damage) return u.damage * (target && target.kind === 'building' ? u.structureBonus || 1 : 1);
   const w = u.def.weapon;
+  if (u.damage) {
+    let d = u.damage * (target && target.kind === 'building' ? u.structureBonus || 1 : 1);
+    // survival: Lancer / Hunter strikes kill a Shaper hero in 1-2 early swings (spec section 3)
+    if (w && w.vsShaper && target && target.type === 'builder') d *= w.vsShaper;
+    return d;
+  }
   const p = world.players[u.owner];
   return w.damage + (p ? p.upgrades.weapons * (w.upgradePerLevel || 0) : 0);
+}
+
+// Survival heroes' strike cooldown counts as elapsed below this (floating-point residue of DT steps).
+export const STRIKE_EPS = 1e-9;
+
+// Survival: a target in a Stasis Prison or invulnerable can't be damaged, so auto-targeting skips it.
+export function untouchable(world, t) {
+  return t.stasisUntil > world.tick || t.invulnUntil > world.tick;
 }
 
 // Starts a swing if possible. Damage is applied after the windup by updateSwing.
 export function startSwing(world, u, target) {
   const w = u.def.weapon;
-  if (u.cooldown > 0 || u.swing) return false;
+  if (u.swing) return false;
   if (u.strikeCooldown) {
     // survival heroes: item attack speed, Decay doubles the strike period, attacking breaks cloak.
-    // Faster than one strike per tick is folded into a damage multiplier.
+    // The cooldown keeps the fraction of a tick it overshot (see updateUnit), so the strike rate
+    // is exact on average; faster than one strike per tick is folded into a damage multiplier.
+    if (u.cooldown > STRIKE_EPS) return false;
     let cd = u.strikeCooldown * (u.decayUntil > world.tick ? 2 : 1);
     const mult = cd < DT ? DT / cd : 1;
     cd = Math.max(cd, DT);
-    u.cooldown = cd;
+    u.cooldown = Math.min(0, u.cooldown) + cd;
     u.swing = { target: target.id, t: Math.min(w.windup, cd * 0.4), hits: w.hits, interval: w.hitInterval, bonus: 0, mult };
     if (u.cloakUntil > world.tick) u.cloakUntil = 0;
     u.lungeHit = false;
@@ -113,6 +128,7 @@ export function startSwing(world, u, target) {
     world.emit({ e: 'swing', a: u.id, t: target.id });
     return true;
   }
+  if (u.cooldown > 0) return false;
   u.cooldown = w.cooldown;
   u.swing = { target: target.id, t: w.windup, hits: w.hits, interval: w.hitInterval, bonus: u.lungeHit ? u.def.lunge.bonusDamage : 0 };
   u.lungeHit = false;
@@ -164,7 +180,7 @@ export function acquireTarget(world, u, range) {
   for (let i = 0; i < near.length; i++) {
     const t = near[i];
     if (t === u || t.owner === u.owner || t.dead || t.hidden || t.warping || t.caged) continue;
-    if (!world.areEnemies(u.owner, t.owner)) continue;
+    if (!world.areEnemies(u.owner, t.owner) || untouchable(world, t)) continue;
     const d = edgeDist(u, t);
     if (d > range) continue;
     if (!world.isVisibleTo(t, u.owner)) continue;
@@ -180,7 +196,8 @@ export function acquireTarget(world, u, range) {
   if (best && best.def.priority >= 20) return best;
   // structures
   for (const b of world.buildings) {
-    if (b.dead || b.owner === u.owner || !world.areEnemies(u.owner, b.owner)) continue;
+    if (b.dead || b.owner === u.owner || !world.areEnemies(u.owner, b.owner) || untouchable(world, b)) continue;
+    if (u.giveUp && u.giveUp.id === b.id && u.giveUp.until > world.tick) continue; // survival: out of reach
     const d = edgeDist(u, b);
     if (d > range) continue;
     if (!world.isVisibleTo(b, u.owner)) continue;

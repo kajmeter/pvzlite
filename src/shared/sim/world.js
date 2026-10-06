@@ -48,6 +48,8 @@ import {
   onSurvivalDamage,
   assignMiner,
   minerWork,
+  minerAvoid,
+  minerReaches,
 } from './survival.js';
 
 let groupSerial = 1;
@@ -493,6 +495,13 @@ export class World {
     return this.players[a].team === this.players[b].team;
   }
 
+  // survival: whether the player's team has ever seen this structure (own / allied ones always)
+  seenByTeam(e, playerId) {
+    if (playerId < 0) return true;
+    if (e.owner !== undefined && e.owner >= 0 && this.isAllied(e.owner, playerId)) return true;
+    return !!((e.seenMask || 0) & (1 << this.players[playerId].team));
+  }
+
   isVisibleTo(e, playerId) {
     if (playerId < 0) return true;
     if (e.owner !== undefined && e.owner >= 0 && this.isAllied(e.owner, playerId)) return true;
@@ -613,6 +622,14 @@ export class World {
 
   minerWork(u, res, o) {
     minerWork(this, u, res, o);
+  }
+
+  minerAvoid(u, res) {
+    minerAvoid(this, u, res);
+  }
+
+  minerReaches(u, res) {
+    return minerReaches(this, u, res);
   }
 
   onSurvivalDamage(attacker, target, dealt) {

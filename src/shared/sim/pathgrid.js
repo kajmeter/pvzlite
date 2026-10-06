@@ -354,7 +354,9 @@ export class PathGrid {
     if (found >= 0 && !rect && pts.length) {
       pts[pts.length - 1] = [goalX, goalY];
     }
-    return this.smooth(sx, sy, pts, opts.radius || 0.4, found >= 0);
+    const out = this.smooth(sx, sy, pts, opts.radius || 0.4);
+    out.reached = found >= 0; // false: the path ends at the closest reachable cell
+    return out;
   }
 
   // A* for 2-cell-wide units: node (x, y) is the 2x2 block x..x+1, y..y+1; waypoints are
@@ -482,6 +484,7 @@ export class PathGrid {
     if (found >= 0 && !rect && pts.length) pts[pts.length - 1] = [goalX, goalY];
     const out = this.smooth(sx, sy, pts, Math.max(opts.radius || 0.9, 0.9));
     out.partial = found < 0;
+    out.reached = found >= 0;
     return out;
   }
 
