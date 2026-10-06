@@ -120,6 +120,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          # only the packaged builds (skip e.g. the Docker build record artifact)
+          pattern: '*-build'
           path: assets
           merge-multiple: true
       - name: Checksums
@@ -170,6 +172,8 @@ jobs:
       - name: Image name
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
       - uses: docker/build-push-action@v6
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
           push: true
