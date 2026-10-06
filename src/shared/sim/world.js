@@ -34,6 +34,17 @@ import {
 } from './structures.js';
 import { updateVision } from './vision.js';
 import { AIController } from '../ai/ai.js';
+import { SurvivalAI } from '../ai/survivalAi.js';
+import {
+  setupSurvival,
+  stepSurvival,
+  onKilled as survivalOnKilled,
+  checkSurvivalVictory,
+  survivalCommand,
+  canPlaceSurvival,
+  placeSurvival,
+  updateSurvivalBuilding,
+} from './survival.js';
 
 let groupSerial = 1;
 
@@ -47,6 +58,7 @@ export class World {
   constructor(opts) {
     const { mapId, players, seed = 1 } = opts;
     this.options = opts;
+    this.mode = opts.mode === 'survival' ? 'survival' : 'classic';
     this.map = getMap(mapId);
     this.grid = new PathGrid(this.map);
     this.hash = new SpatialHash(this.map.width, this.map.height, 4);
@@ -77,6 +89,7 @@ export class World {
       color: p.color ?? i,
       colorHex: PLAYER_COLORS[(p.color ?? i) % PLAYER_COLORS.length].hex,
       type: p.type || 'human',
+      role: p.role || 'builder',
       difficulty: p.difficulty || 'normal',
       crystals: opts.startCrystals ?? START_CRYSTALS,
       flux: opts.startFlux ?? START_FLUX,
@@ -161,6 +174,13 @@ export class World {
       this.neutrals.push(e);
     }
 
+    if (this.mode === 'survival') {
+      setupSurvival(this, opts);
+      for (const p of this.players) if (p.type === 'ai') this.ais.push(new SurvivalAI(this, p.id));
+      updateVision(this);
+      return;
+    }
+
     // start locations
     let starts = map.starts.slice();
     const n = this.players.length;
@@ -241,6 +261,7 @@ export class World {
       maxAmount: r.amount,
       rich: !!r.rich,
       base: r.base,
+      grove: r.grove ?? -1,
       miner: 0,
       siphon: 0,
     });
@@ -293,9 +314,11 @@ export class World {
     return u;
   }
 
-  createBuilding(type, owner, bx, by, built) {
+  createBuilding(type, owner, bx, by, built, over = null) {
     const def = BUILDINGS[type];
     const s = def.size;
+    const maxHp = over?.hp ?? def.hp;
+    const maxBarrier = over?.barrier ?? def.barrier;
     const b = this.addEntity({
       kind: 'building',
       type,
@@ -308,11 +331,12 @@ export class World {
       x: bx + s / 2,
       y: by + s / 2,
       r: s / 2,
-      hp: built ? def.hp : def.hp * 0.1,
-      maxHp: def.hp,
-      barrier: built ? def.barrier : def.barrier * 0.1,
-      maxBarrier: def.barrier,
-      armor: def.armor,
+      hp: built ? maxHp : maxHp * 0.1,
+      maxHp,
+      barrier: built ? maxBarrier : maxBarrier * 0.1,
+      maxBarrier,
+      armor: over?.armor ?? def.armor,
+      level: over?.level ?? 0,
       built: false,
       progress: built ? 1 : 0,
       queue: [],
@@ -395,6 +419,7 @@ export class World {
       this.grid.clearRect(e.bx, e.by, e.w, e.h, e.id);
     }
     this.emit({ e: 'death', id: e.id, type: e.type, kind: e.kind, owner: e.owner, x: e.x, y: e.y, silent: silent ? 1 : 0 });
+    if (this.mode === 'survival' && !silent) survivalOnKilled(this, e, attacker);
   }
 
   removeDead() {
@@ -574,6 +599,12 @@ export class World {
     return best;
   }
 
+  survivalMine(u, amount) {
+    const p = this.players[u.owner];
+    p.crystals += amount;
+    p.stats.crystalsMined += amount;
+  }
+
   deposit(u) {
     if (!u.carry || u.carry.amount <= 0) return;
     const p = this.players[u.owner];
@@ -638,6 +669,7 @@ export class World {
     const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
     const x = Math.min(Math.max(num(c.x), 0), this.map.width);
     const y = Math.min(Math.max(num(c.y), 0), this.map.height);
+    if (this.mode === 'survival' && survivalCommand(this, pid, c, units)) return;
     const give = (u, order) => {
       if (!queue) {
         clearOrders(this, u);
@@ -690,7 +722,7 @@ export class World {
         if (t.type === 'vent' && t.siphon) t = this.byId.get(t.siphon) || t;
         const ok = t.type === 'crystal' || (t.type === 'siphon' && t.owner === pid);
         for (const u of units) {
-          if (u.def.role === 'worker' && ok) {
+          if ((u.def.role === 'worker' || u.def.role === 'builder') && ok) {
             give(u, { type: 'gather', target: t.id });
             u.lastGather = t.id;
           } else give(u, { type: 'move', x: t.x, y: t.y });
@@ -783,6 +815,7 @@ export class World {
     if (this.over) return;
     this.tick++;
     this.pathBudget = 90;
+    if (this.mode === 'survival') stepSurvival(this);
     for (const ai of this.ais) ai.update();
     if (this.pending.length) {
       const cmds = this.pending;
@@ -811,7 +844,18 @@ export class World {
     }
     resolveCollisions(this);
     const bl = this.buildings;
-    for (let i = 0; i < bl.length; i++) if (!bl[i].dead) updateBuilding(this, bl[i]);
+    if (this.mode === 'survival') {
+      for (let i = 0; i < bl.length; i++) {
+        const b = bl[i];
+        if (b.dead) continue;
+        if (b.def.survival) {
+          if (!b.built) updateBuilding(this, b);
+          else updateSurvivalBuilding(this, b);
+        }
+      }
+    } else {
+      for (let i = 0; i < bl.length; i++) if (!bl[i].dead) updateBuilding(this, bl[i]);
+    }
 
     // barrier regeneration
     const delayTicks = BARRIER_REGEN_DELAY * TICK_RATE;
@@ -821,14 +865,14 @@ export class World {
         const e = list[i];
         if (e.dead || e.barrier >= e.maxBarrier) continue;
         if (e.kind === 'building' && !e.built) continue;
-        if (this.tick - e.lastDamageTick > delayTicks) e.barrier = Math.min(e.maxBarrier, e.barrier + regen);
+        if (this.tick - e.lastDamageTick > delayTicks) e.barrier = Math.min(e.maxBarrier, e.barrier + regen * (e.regenMult || 1));
       }
     }
 
     this.removeDead();
     if (this.tick % 10 === 0) this.updateBeacons();
     if (this.tick % FOG_UPDATE_TICKS === 0) updateVision(this);
-    if (this.tick % 20 === 0) this.checkVictory();
+    if (this.tick % 20 === 0 || (this.mode === 'survival' && this.tick >= this.survival.endTick)) this.checkVictory();
     if (this.tick % (TICK_RATE * 10) === 0) this.sampleStats();
   }
 
@@ -849,6 +893,8 @@ export class World {
   eliminate(p) {
     if (p.eliminated) return;
     p.eliminated = true;
+    p.heroId = 0;
+    p.respawnAt = -1;
     for (const e of this.entities) {
       if (e.owner === p.id && !e.dead && (e.kind === 'unit' || e.kind === 'building')) this.kill(e, null, true);
     }
@@ -858,6 +904,10 @@ export class World {
 
   checkVictory() {
     if (this.over) return;
+    if (this.mode === 'survival') {
+      checkSurvivalVictory(this);
+      return;
+    }
     for (const p of this.players) {
       if (p.eliminated) continue;
       let hasBuilding = false;
@@ -901,10 +951,12 @@ export class World {
   // ---------------------------------------------------------------- helpers used by UI / AI / tests
 
   canPlace(owner, type, bx, by) {
+    if (this.mode === 'survival') return canPlaceSurvival(this, owner, type, bx, by);
     return canPlace(this, owner, type, bx, by);
   }
 
   placeBuilding(owner, type, bx, by, builder) {
+    if (this.mode === 'survival') return placeSurvival(this, owner, type, bx, by, builder);
     return placeBuilding(this, owner, type, bx, by, builder);
   }
 

@@ -21,6 +21,7 @@ function png(w, h, rgb) {
 const out = process.argv[2] || '.';
 const S = 4;
 for (const d of MAP_DESCRIPTIONS) {
+  if (process.argv[3] && !process.argv[3].split(",").includes(d.id)) continue;
   const m = getMap(d.id);
   const W = m.width * S, H = m.height * S;
   const buf = Buffer.alloc(W * H * 3);
@@ -38,6 +39,8 @@ for (const d of MAP_DESCRIPTIONS) {
   for (const b of m.bases) for (let y = b.ty; y < b.ty + 5; y++) for (let x = b.tx; x < b.tx + 5; x++) set(x, y, b.start ? [255, 60, 60] : [255, 160, 200]);
   for (const b of m.beacons) for (let y = b.y; y < b.y + 2; y++) for (let x = b.x; x < b.x + 2; x++) set(x, y, [255, 255, 255]);
   for (const b of m.rubble) for (let y = b.y; y < b.y + 4; y++) for (let x = b.x; x < b.x + 4; x++) set(x, y, [160, 120, 90]);
+  for (const sp of m.builderSpawns || []) for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) set(Math.floor(sp.x) + x, Math.floor(sp.y) + y, [255, 255, 0]);
+  if (m.mode === 'survival') for (let y = -2; y <= 2; y++) for (let x = -2; x <= 2; x++) set(Math.floor(m.cage.x) + x, Math.floor(m.cage.y) + y, [255, 0, 255]);
   fs.writeFileSync(path.join(out, `map-${d.id}.png`), png(W, H, buf));
   console.log(d.id, 'bases', m.bases.length, 'res', m.resources.length, 'starts', m.starts.length, 'doodads', m.doodads.length);
 }

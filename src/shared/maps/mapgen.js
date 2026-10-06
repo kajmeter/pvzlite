@@ -165,6 +165,8 @@ export function generateMap(desc) {
   const basesRaw = expandFeatures(sym, W, H, (desc.bases || []).map((p) => ({ kind: 'base', ...p })));
   const beaconsRaw = expandFeatures(sym, W, H, (desc.beacons || []).map((p) => ({ kind: 'beacon', ...p })));
   const rubbleRaw = expandFeatures(sym, W, H, (desc.rubble || []).map((p) => ({ kind: 'rubble', ...p })));
+  const grovesRaw = expandFeatures(sym, W, H, (desc.groves || []).map((p) => ({ kind: 'grove', ...p })));
+  const spawnsRaw = expandFeatures(sym, W, H, (desc.builderSpawns || []).map((p) => ({ kind: 'spawn', ...p })));
 
   // 1. plateaus in order (later ones override)
   for (const p of plateaus) {
@@ -368,6 +370,41 @@ export function generateMap(desc) {
     bases.push(base);
   });
 
+  // crystal groves: small clusters of fields scattered over the map (survival mode)
+  const cage = desc.cage ? { x: desc.cage.x, y: desc.cage.y } : { x: W / 2, y: H / 2 };
+  // keep the hunter cage area clear
+  const cr = desc.cageRadius ?? 6;
+  markRect(Math.floor(cage.x - cr), Math.floor(cage.y - cr), cr * 2, cr * 2);
+  const groves = [];
+  grovesRaw.forEach((g, gi) => {
+    const n = g.n ?? 3;
+    let placed = 0;
+    for (let k = 0; k < 40 && placed < n; k++) {
+      const a = k * 2.399 + hash2(gi, k, 5) * 0.8;
+      const r = (k === 0 ? 0 : 1.2) + Math.sqrt(k) * 0.9 * (0.7 + hash2(gi, k, 6) * 0.6);
+      const fx = Math.round(g.x + Math.cos(a) * r - 1);
+      const fy = Math.round(g.y + Math.sin(a) * r - 0.5);
+      if (!rectFree(fx, fy, 2, 1)) continue;
+      // keep a walkable gap between fields of a grove
+      markRect(fx - 1, fy - 1, 4, 3);
+      resources.push({ kind: 'crystal', x: fx, y: fy, w: 2, h: 1, amount: g.rich ? 4500 : 3000, rich: !!g.rich, base: -1, grove: gi });
+      placed++;
+    }
+    if (placed) groves.push({ x: g.x, y: g.y, n: placed, rich: !!g.rich });
+  });
+  // un-mark the walkable gaps (they were only reserved during placement)
+  occupied.fill(0);
+  for (const r of resources) markRect(r.x, r.y, r.w, r.h);
+  const builderSpawns = spawnsRaw.map((p) => ({ x: p.x, y: p.y }));
+  if (!builderSpawns.length) {
+    for (const b of bases) {
+      const dx = W / 2 - b.x;
+      const dy = H / 2 - b.y;
+      const d = Math.hypot(dx, dy) || 1;
+      builderSpawns.push({ x: b.x + (dx / d) * 3, y: b.y + (dy / d) * 3 });
+    }
+  }
+
   // start locations in order of their feature list (symIndex groups)
   const starts = [];
   bases.forEach((b) => {
@@ -412,6 +449,12 @@ export function generateMap(desc) {
     rubble,
     doodads,
     seed,
+    mode: desc.mode || 'classic',
+    groves,
+    cage,
+    cageRadius: cr,
+    builderSpawns,
+    hunterSlots: desc.hunterSlots ?? 2,
   };
 }
 

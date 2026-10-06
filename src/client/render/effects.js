@@ -285,7 +285,7 @@ export class Effects {
     const m = it.mesh;
     m.position.set(x, y, z);
     m.rotation.set(flip ? Math.PI : 0, -facing, 0);
-    m.material.color.copy(color).lerp(new THREE.Color(0xffffff), 0.5).multiplyScalar(2.0);
+    m.material.color.copy(color).lerp(new THREE.Color(0xffffff), 0.45).multiplyScalar(1.35);
   }
 
   bubble(x, y, z, r, color) {
@@ -376,12 +376,12 @@ export class Effects {
     this.frame = (this.frame || 0) + 1;
     this.particles.update(dt);
     this.slashes.update(dt, (it, f) => {
-      it.mesh.material.opacity = 0.9 * (1 - f);
+      it.mesh.material.opacity = 0.7 * (1 - f);
       const s = 0.9 + f * 0.35;
       it.mesh.scale.set(s, 1, s);
     });
     this.bubbles.update(dt, (it, f) => {
-      it.mesh.material.uniforms.uAlpha.value = 0.9 * (1 - f);
+      it.mesh.material.uniforms.uAlpha.value = 0.55 * (1 - f);
       it.mesh.scale.setScalar(it.data.r * (1 + f * 0.08));
     });
     this.flashes.update(dt, (it, f) => {

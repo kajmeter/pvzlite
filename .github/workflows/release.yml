@@ -1,0 +1,178 @@
+# Builds and publishes ready-to-download binaries on EVERY push:
+#   Windows installer + portable .exe, Linux .deb + AppImage, standalone server
+#   binaries (Linux/Windows), and a static web build. Each push creates a new
+#   GitHub Release (marked "latest") so the README download links always work.
+name: Build & Release
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 22
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - name: Unit & integration tests
+        run: npm test
+      - name: Build web client
+        run: npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  linux:
+    name: Linux packages + server binaries
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Set build version
+        run: npm version "1.0.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+      - run: npm run build
+      - name: Desktop packages (.deb, AppImage, Windows zip)
+        run: npx electron-builder --linux deb AppImage --win zip --x64 --publish never
+      - name: Standalone server binaries (web client embedded)
+        run: node scripts/build-server-bin.mjs linux-x64 win-x64
+      - name: Static web build
+        run: node scripts/build-web-zip.mjs
+      - name: Collect with stable names
+        run: |
+          mkdir -p out
+          cp release/shardfall_*_amd64.deb out/shardfall_amd64.deb
+          cp release/Shardfall-*-x86_64.AppImage out/Shardfall-x86_64.AppImage
+          cp release/Shardfall-*-win-x64.zip out/Shardfall-win-x64.zip
+          cp release/shardfall-server-linux-x64 out/shardfall-server-linux-x64
+          cp release/shardfall-server-win-x64.exe out/shardfall-server-win-x64.exe
+          cp release/shardfall-web.zip out/shardfall-web.zip
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: out/
+          retention-days: 7
+
+  windows:
+    name: Windows installer
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Set build version
+        run: npm version "1.0.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+      - run: npm run build
+      - name: NSIS installer + portable exe
+        run: npx electron-builder --win nsis portable --x64 --publish never
+      - name: Collect with stable names
+        shell: bash
+        run: |
+          mkdir -p out
+          cp release/Shardfall-Setup-*.exe out/Shardfall-Setup.exe
+          cp release/Shardfall-Portable-*.exe out/Shardfall-Portable.exe
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: out/
+          retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          cd assets
+          chmod +x shardfall-server-linux-x64 Shardfall-x86_64.AppImage
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Release notes
+        run: |
+          cat > notes.md <<NOTES
+          Automated build of \`${GITHUB_REF_NAME}\` @ \`${GITHUB_SHA::7}\`.
+
+          | Platform | Download |
+          |---|---|
+          | Windows installer | **Shardfall-Setup.exe** |
+          | Windows portable | **Shardfall-Portable.exe** (no install) or **Shardfall-win-x64.zip** |
+          | Ubuntu / Debian | **shardfall_amd64.deb** |
+          | Any Linux | **Shardfall-x86_64.AppImage** |
+          | Dedicated server (Linux) | **shardfall-server-linux-x64** |
+          | Dedicated server (Windows) | **shardfall-server-win-x64.exe** |
+          | Static web hosting | **shardfall-web.zip** |
+
+          See the README for installation steps.
+          NOTES
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Shardfall v1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          body_path: notes.md
+          make_latest: 'true'
+          files: assets/*
+
+  docker:
+    name: Docker image (ghcr.io)
+    needs: test
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:1.0.${{ github.run_number }}

@@ -3,7 +3,31 @@ import { MAP_DESCRIPTIONS, getMap, listMaps } from '../src/shared/maps/index.js'
 import { PathGrid } from '../src/shared/sim/pathgrid.js';
 import { CELL_BUILDABLE } from '../src/shared/maps/mapgen.js';
 
-describe.each(MAP_DESCRIPTIONS.map((d) => [d.id]))('map %s', (id) => {
+describe.each(MAP_DESCRIPTIONS.filter((d) => d.mode === 'survival').map((d) => [d.id]))('survival map %s', (id) => {
+  const map = getMap(id);
+
+  it('has builder spawns, groves and a cage', () => {
+    expect(map.mode).toBe('survival');
+    expect(map.builderSpawns.length + map.hunterSlots).toBeGreaterThanOrEqual(map.players);
+    expect(map.groves.length).toBeGreaterThanOrEqual(10);
+    expect(map.resources.filter((r) => r.kind === 'crystal').length).toBeGreaterThanOrEqual(30);
+  });
+
+  it('every spawn and grove is reachable from the hunter cage', () => {
+    const grid = new PathGrid(map);
+    for (const r of map.resources) grid.setRect(r.x, r.y, r.w, r.h, 1);
+    const c = map.cage;
+    expect(grid.pathable(Math.floor(c.x), Math.floor(c.y))).toBe(true);
+    for (const p of [...map.builderSpawns, ...map.groves]) {
+      const path = grid.findPath(c.x, c.y, p.x, p.y, { maxNodes: 60000 });
+      expect(path, `${p.x},${p.y}`).toBeTruthy();
+      const end = path[path.length - 1];
+      expect(Math.hypot(end[0] - p.x, end[1] - p.y), `${p.x},${p.y} reachable`).toBeLessThan(4.5);
+    }
+  });
+});
+
+describe.each(MAP_DESCRIPTIONS.filter((d) => !d.mode || d.mode === 'classic').map((d) => [d.id]))('map %s', (id) => {
   const map = getMap(id);
 
   it('has the advertised number of start locations', () => {
@@ -50,9 +74,10 @@ describe.each(MAP_DESCRIPTIONS.map((d) => [d.id]))('map %s', (id) => {
 
 describe('map list', () => {
   it('lists all maps with metadata', () => {
-    const maps = listMaps();
+    const maps = listMaps('classic');
     expect(maps.length).toBeGreaterThanOrEqual(5);
     expect(maps.some((m) => m.players === 4)).toBe(true);
+    expect(listMaps('survival').length).toBeGreaterThanOrEqual(3);
   });
 });
 

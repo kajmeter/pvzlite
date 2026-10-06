@@ -182,7 +182,7 @@ export class GameRenderer {
     // composer
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.75, 0.55, 0.82);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.55, 0.5, 0.86);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.resize();

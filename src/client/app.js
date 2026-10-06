@@ -7,6 +7,8 @@ import { LocalSession } from './game/localSession.js';
 import { NetClient } from './net/netClient.js';
 import { RemoteSession } from './net/remoteSession.js';
 import { AIController } from '../shared/ai/ai.js';
+import { drawMapPreview } from './ui/minimap.js';
+import { getMap } from '../shared/maps/index.js';
 
 const SETTINGS_KEY = 'shardfall.settings.v1';
 
@@ -97,6 +99,16 @@ export class App {
         const s = app.game.session;
         s.fogEnabled = !on;
       },
+      mapPreview(id, size = 256) {
+        const c = document.createElement('canvas');
+        drawMapPreview(c, getMap(id), size);
+        return c.toDataURL('image/png');
+      },
+      focusAction(dist = 26) {
+        const a = app.game.findAction();
+        if (a) this.camera(a.x, a.y + 3, dist);
+        return a;
+      },
       camera(x, y, dist) {
         const c = app.renderer.rtsCamera;
         c.jumpTo(x, y);
@@ -138,6 +150,7 @@ export class App {
   }
 
   defaultServerUrl() {
+    if (window.shardfallDesktop) return 'ws://localhost:7777/ws';
     if (location.protocol === 'http:' || location.protocol === 'https:') {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       if (window.__SHARDFALL_SERVER__) return `${proto}//${location.host}/ws`;

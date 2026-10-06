@@ -130,6 +130,32 @@ export class Game {
     }
   }
 
+  // Where the most interesting fight is happening (used by the menu camera and tooling)
+  findAction() {
+    const s = this.session;
+    const lancers = s.units().filter((u) => u.type === 'lancer' && !u.hidden);
+    let best = null;
+    let bestScore = 0;
+    const step = Math.max(1, Math.floor(lancers.length / 40));
+    for (let i = 0; i < lancers.length; i += step) {
+      const u = lancers[i];
+      let friends = 0;
+      let enemies = 0;
+      for (const v of lancers) {
+        if (Math.hypot(v.x - u.x, v.y - u.y) < 12) {
+          if (v.owner === u.owner) friends++;
+          else enemies++;
+        }
+      }
+      const score = enemies > 0 ? (friends + enemies) * 3 : friends;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x: u.x, y: u.y, score };
+      }
+    }
+    return best;
+  }
+
   // menu background: follow the action
   updateAttract(dt) {
     const s = this.session;
@@ -137,13 +163,9 @@ export class Game {
     this.attractTimer -= dt;
     if (this.attractTimer <= 0) {
       this.attractTimer = 9;
-      // find the biggest cluster of combat units
-      const army = s.units().filter((u) => u.type === 'lancer');
-      let target = null;
-      if (army.length) {
-        const u = army[Math.floor(Math.random() * army.length)];
-        target = { x: u.x, y: u.y };
-      } else {
+      // follow the biggest fight, or the biggest army
+      let target = this.findAction();
+      if (!target) {
         const bl = s.buildings();
         if (bl.length) {
           const b = bl[Math.floor(Math.random() * bl.length)];
@@ -154,7 +176,9 @@ export class Game {
       cam.targetDistance = 24 + Math.random() * 10;
     }
     if (this.attractTarget) {
-      cam.target.x += (this.attractTarget.x - cam.target.x) * Math.min(1, dt * 0.35);
+      // keep the action right of the menu panel
+      const offX = window.innerWidth > 900 ? -9 : 0;
+      cam.target.x += (this.attractTarget.x + offX - cam.target.x) * Math.min(1, dt * 0.35);
       cam.target.z += (this.attractTarget.y + 4 - cam.target.z) * Math.min(1, dt * 0.35);
     }
     // restart the attract match when it ends

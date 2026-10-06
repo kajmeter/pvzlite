@@ -239,8 +239,10 @@ label.row {
 }
 
 .main-menu .title-logo {
-  font-size: 50px;
+  font-size: 48px;
   margin-bottom: 0;
+  width: max-content;
+  padding-right: 0.25em;
 }
 
 .main-menu .tagline {

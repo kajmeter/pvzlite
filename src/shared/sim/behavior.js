@@ -10,12 +10,16 @@ import {
 import { edgeDist, angleLerp, closestPoint } from './geom.js';
 import { startSwing, updateSwing, acquireTarget, canTarget } from './combat.js';
 
+const SURVIVAL_MINE_TIME = 2.0;
+const isWorker = (u) => u.def.role === 'worker' || u.def.role === 'builder';
+
 const ARRIVE_EPS = 0.12;
 
 // ---------------------------------------------------------------- movement
 
 export function unitSpeed(world, u) {
   if (u.lunging > 0) return u.def.lunge.speed;
+  if (u.speedOverride) return u.speedOverride * (u.sprintUntil > world.tick ? 1.6 : 1);
   const p = world.players[u.owner];
   if (u.type === 'lancer' && p && p.upgrades.lunge) return u.def.lungeSpeed;
   return u.def.speed;
@@ -253,6 +257,10 @@ export function updateUnit(world, u) {
     if (u.warping === 0) world.emit({ e: 'warped', id: u.id });
     return;
   }
+  if (u.caged) {
+    u.nav = null;
+    return;
+  }
   updateSwing(world, u, DT);
 
   const o = u.orders[0];
@@ -296,7 +304,7 @@ export function updateUnit(world, u) {
 }
 
 function idle(world, u) {
-  if (u.def.role === 'worker') return;
+  if (isWorker(u)) return;
   if (!u.guard) u.guard = { x: u.x, y: u.y };
   // auto-acquire
   if (u.target) {
@@ -359,6 +367,11 @@ function orderFollow(world, u, o) {
 function orderAttack(world, u, o) {
   u.guard = null;
   const t = world.byId.get(o.target);
+  if (t && !t.dead && t.kind !== 'unit' && t.hp !== undefined && !world.isVisibleTo(t, u.owner)) {
+    // structure hidden in the fog: walk to it, then attack once it comes into view
+    if (moveTo(world, u, t.x, t.y, { target: t, tolerance: u.def.weapon.range + 0.02, failOk: true }) === 'failed') endOrder(world, u);
+    return;
+  }
   if (!t || !canTarget(world, u, t, true)) {
     endOrder(world, u);
     return;
@@ -369,7 +382,7 @@ function orderAttack(world, u, o) {
 
 function orderHold(world, u) {
   u.nav = null;
-  if (u.def.role === 'worker') return;
+  if (isWorker(u)) return;
   let t = u.target ? world.byId.get(u.target) : null;
   if (!t || !canTarget(world, u, t) || edgeDist(u, t) > u.def.weapon.range + 0.15) {
     t = acquireTarget(world, u, u.def.weapon.range + 0.15);
@@ -388,7 +401,7 @@ function orderAttackMove(world, u, o) {
   }
   // re-evaluate target periodically (switch to closer threats)
   if ((world.tick + u.id) % 5 === 0) {
-    const range = u.def.role === 'worker' ? 3 : u.def.sight - 1.5;
+    const range = isWorker(u) ? 3 : u.def.sight - 1.5;
     const nt = acquireTarget(world, u, range);
     if (nt && (!t || (t.kind !== 'unit' && nt.kind === 'unit') || (edgeDist(u, nt) + 1.5 < edgeDist(u, t) && !u.swing))) {
       t = nt;
@@ -432,9 +445,11 @@ export function engage(world, u, t, allowMove) {
   if (!allowMove) return;
   // Lunge Drive dash
   const p = world.players[u.owner];
-  if (u.def.lunge && p.upgrades.lunge && u.autocast.lunge !== false && u.lungeCd <= 0 && d <= u.def.lunge.range && d > 0.6) {
+  const canLunge = u.type === 'hunter' || p.upgrades.lunge;
+  const lungeRange = u.lungeRange ?? u.def.lunge?.range;
+  if (u.def.lunge && canLunge && u.autocast.lunge !== false && u.lungeCd <= 0 && d <= lungeRange && d > 0.6) {
     u.lunging = u.def.lunge.maxDuration;
-    u.lungeCd = u.def.lunge.cooldown;
+    u.lungeCd = u.lungeCooldown ?? u.def.lunge.cooldown;
     u.lungeHit = true;
     world.emit({ e: 'lunge', id: u.id, t: t.id });
   }
@@ -538,7 +553,7 @@ export function orderGather(world, u, o) {
         }
         res.miner = u.id;
         o.phase = 'mining';
-        o.timer = MINE_TIME;
+        o.timer = world.mode === 'survival' ? SURVIVAL_MINE_TIME : MINE_TIME;
       }
       break;
     }
@@ -558,7 +573,7 @@ export function orderGather(world, u, o) {
         }
         res.miner = u.id;
         o.phase = 'mining';
-        o.timer = MINE_TIME;
+        o.timer = world.mode === 'survival' ? SURVIVAL_MINE_TIME : MINE_TIME;
       } else if ((world.tick + u.id) % 10 === 0) {
         const alt = world.findFreeCrystal(res, u, 5);
         if (alt) {
@@ -569,11 +584,24 @@ export function orderGather(world, u, o) {
       break;
     }
     case 'mining': {
-      u.ghost = true;
+      u.ghost = world.mode !== 'survival';
       u.mining = res.id;
       const [cx, cy] = closestPoint(res, u.x, u.y);
       if (!isSiphon) u.targetFacing = Math.atan2(cy - u.y, cx - u.x);
       o.timer -= DT;
+      if (o.timer <= 0 && world.mode === 'survival' && !isSiphon) {
+        const amt = Math.min(u.mineYield || 4, res.amount);
+        res.amount -= amt;
+        world.survivalMine(u, amt);
+        world.emit({ e: 'mined', id: u.id, k: 'crystals', n: amt, x: u.x, y: u.y });
+        if (res.amount <= 0) {
+          res.miner = 0;
+          u.mining = 0;
+          world.kill(res, null);
+          o.phase = 'toRes';
+        } else o.timer = SURVIVAL_MINE_TIME;
+        break;
+      }
       if (o.timer <= 0) {
         const src = isSiphon ? res.vent : res;
         const per = isSiphon ? FLUX_PER_TRIP : CRYSTALS_PER_TRIP;

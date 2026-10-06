@@ -6,7 +6,7 @@ import { edgeDist } from './geom.js';
 // Returns actual damage dealt (barrier + hull).
 export function applyDamage(world, target, amount, attacker) {
   if (target.dead || target.hp === undefined) return 0;
-  if (target.invulnerable) return 0;
+  if (target.invulnerable || target.caged) return 0;
   const tp = target.owner >= 0 ? world.players[target.owner] : null;
   const barrierArmor = tp ? tp.upgrades.barrier : 0;
   let armor = target.armor || 0;
@@ -46,7 +46,8 @@ export function applyDamage(world, target, amount, attacker) {
   return dealt;
 }
 
-export function weaponDamage(world, u) {
+export function weaponDamage(world, u, target) {
+  if (u.damage) return u.damage * (target && target.kind === 'building' ? u.structureBonus || 1 : 1);
   const w = u.def.weapon;
   const p = world.players[u.owner];
   return w.damage + (p ? p.upgrades.weapons * (w.upgradePerLevel || 0) : 0);
@@ -74,7 +75,7 @@ export function updateSwing(world, u, dt) {
     u.swing = null;
     return;
   }
-  let dmg = weaponDamage(world, u);
+  let dmg = weaponDamage(world, u, target);
   if (s.bonus) {
     dmg += s.bonus;
     s.bonus = 0;
@@ -90,7 +91,7 @@ export function updateSwing(world, u, dt) {
 export function canTarget(world, u, t, explicit = false) {
   if (!t || t.dead || t.hp === undefined) return false;
   if (t.kind === 'resource' || t.type === 'beacon') return false;
-  if (t.hidden) return false;
+  if (t.hidden || t.caged) return false;
   if (t.owner === -1) return explicit && t.type === 'rubble';
   if (!world.areEnemies(u.owner, t.owner) && !explicit) return false;
   if (t.owner === u.owner && !explicit) return false;
@@ -104,7 +105,7 @@ export function acquireTarget(world, u, range) {
   const near = world.hash.query(u.x, u.y, range + 2, world._q);
   for (let i = 0; i < near.length; i++) {
     const t = near[i];
-    if (t === u || t.owner === u.owner || t.dead || t.hidden || t.warping) continue;
+    if (t === u || t.owner === u.owner || t.dead || t.hidden || t.warping || t.caged) continue;
     if (!world.areEnemies(u.owner, t.owner)) continue;
     const d = edgeDist(u, t);
     if (d > range) continue;

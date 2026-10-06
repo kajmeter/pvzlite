@@ -59,6 +59,16 @@ export function updateVision(world) {
     const vl = viewerLevel(map, b.x, b.y);
     stamp(map, world.vision[team], world.explored[team], b.x, b.y, b.built ? b.def.sight : 4, vl);
   }
+  // survival: Hunter reveal pulse exposes every Shaper briefly
+  if (world.mode === 'survival') {
+    for (const p of world.players) {
+      if (p.role !== 'hunter' || !(p.revealUntil > world.tick)) continue;
+      for (const u of world.units) {
+        if (u.dead || u.type !== 'builder') continue;
+        stamp(map, world.vision[p.team], world.explored[p.team], u.x, u.y, 3.5, 99);
+      }
+    }
+  }
   for (const n of world.neutrals) {
     if (n.type !== 'beacon' || n.dead) continue;
     for (const team of n.holders) {

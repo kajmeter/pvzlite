@@ -4,6 +4,121 @@ import { generateMap } from './mapgen.js';
 const D = (deg) => (deg * Math.PI) / 180;
 
 export const MAP_DESCRIPTIONS = [
+  // ---------------------------------------------------------------- survival maps (pvzlite mode)
+  {
+    id: 'wilds',
+    name: 'Crystal Wilds',
+    mode: 'survival',
+    description: 'Jungle clearings full of crystal groves. Four highland terraces with narrow ramps are perfect for walling in.',
+    theme: 'verdant',
+    players: 10,
+    hunterSlots: 2,
+    width: 128,
+    height: 128,
+    symmetry: 'rotate90',
+    seed: 101,
+    cage: { x: 64, y: 64 },
+    plateaus: [{ x: 28, y: 28, r: 13, level: 1, rough: 1.3 }],
+    ramps: [
+      { x: 30, y: 46, x2: 30, y2: 39, from: 0, to: 1, width: 3 },
+      { x: 46, y: 26, x2: 39, y2: 26, from: 0, to: 1, width: 3 },
+    ],
+    chasms: [
+      { x: 64, y: 42, r: 3 },
+      { x: 42, y: 52, r: 3.5 },
+      { x: 14, y: 70, r: 3 },
+    ],
+    groves: [
+      { x: 22, y: 22, n: 4 },
+      { x: 33, y: 20, n: 3 },
+      { x: 52, y: 16, n: 3 },
+      { x: 16, y: 52, n: 3 },
+      { x: 53, y: 53, n: 3, rich: true },
+      { x: 36, y: 64, n: 2 },
+    ],
+    builderSpawns: [
+      { x: 26, y: 31 },
+      { x: 46, y: 19 },
+    ],
+  },
+  {
+    id: 'expanse',
+    name: 'Frozen Expanse',
+    mode: 'survival',
+    description: 'Wide snowfields between two glacier plateaus. The high shelves hide rich crystals behind single ramps.',
+    theme: 'frost',
+    players: 10,
+    hunterSlots: 2,
+    width: 120,
+    height: 120,
+    symmetry: 'rotate180',
+    seed: 113,
+    cage: { x: 60, y: 60 },
+    plateaus: [
+      { x: 30, y: 33, r: 14, level: 1, rough: 1.4 },
+      { x: 22, y: 86, r: 9, level: 2, rough: 1 },
+    ],
+    ramps: [
+      { x: 47, y: 38, x2: 41, y2: 36, from: 0, to: 1, width: 3 },
+      { x: 28, y: 52, x2: 29, y2: 45, from: 0, to: 1, width: 3 },
+      { x: 33, y: 80, x2: 28, y2: 83, from: 0, to: 2, width: 3 },
+    ],
+    chasms: [
+      { x: 60, y: 42, r: 4 },
+      { x: 44, y: 62, r: 3 },
+      { x: 10, y: 60, r: 3 },
+    ],
+    groves: [
+      { x: 25, y: 27, n: 4 },
+      { x: 36, y: 38, n: 3 },
+      { x: 60, y: 18, n: 3 },
+      { x: 42, y: 74, n: 3 },
+      { x: 13, y: 46, n: 2 },
+      { x: 21, y: 88, n: 3, rich: true },
+      { x: 76, y: 50, n: 2 },
+    ],
+    builderSpawns: [
+      { x: 30, y: 33 },
+      { x: 62, y: 24 },
+      { x: 40, y: 80 },
+      { x: 14, y: 54 },
+    ],
+  },
+  {
+    id: 'labyrinth',
+    name: 'Molten Labyrinth',
+    mode: 'survival',
+    description: 'Lava rivers carve the land into pockets. Few entrances, many dead ends — wall the gaps and survive.',
+    theme: 'ember',
+    players: 10,
+    hunterSlots: 2,
+    width: 112,
+    height: 112,
+    symmetry: 'rotate90',
+    seed: 127,
+    cage: { x: 56, y: 56 },
+    cageRadius: 5,
+    plateaus: [{ x: 22, y: 22, r: 10, level: 1, rough: 1 }],
+    ramps: [{ x: 35, y: 30, x2: 29, y2: 27, from: 0, to: 1, width: 3 }],
+    chasms: [
+      { shape: 'rect', x: 56, y: 28, w: 5, h: 22, type: 'pit' },
+      { shape: 'rect', x: 34, y: 44, w: 18, h: 4, type: 'pit' },
+      { x: 18, y: 50, r: 3, type: 'pit' },
+    ],
+    groves: [
+      { x: 20, y: 19, n: 4 },
+      { x: 42, y: 16, n: 3 },
+      { x: 14, y: 38, n: 3 },
+      { x: 42, y: 34, n: 2, rich: true },
+      { x: 28, y: 58, n: 2 },
+    ],
+    builderSpawns: [
+      { x: 22, y: 26 },
+      { x: 44, y: 24 },
+    ],
+  },
+
+  // ---------------------------------------------------------------- classic RTS maps
   {
     id: 'frostgate',
     name: 'Frostgate Ruins',
@@ -167,8 +282,9 @@ export function getMap(id) {
   return map;
 }
 
-export function listMaps() {
-  return MAP_DESCRIPTIONS.map((m) => ({
+export function listMaps(mode) {
+  return MAP_DESCRIPTIONS.filter((m) => !mode || (m.mode || 'classic') === mode || (mode === 'survival' && !m.mode)).map((m) => ({
+    mode: m.mode || 'classic',
     id: m.id,
     name: m.name,
     description: m.description,

@@ -50,6 +50,47 @@ export const UNITS = {
   },
 };
 
+// Survival-mode heroes (pvzlite): one Shaper per Builder player, one Lancer per Hunter player.
+// Their stats are recomputed from level / upgrades (see data/survival.js).
+UNITS.builder = {
+  ...UNITS.shaper,
+  id: 'builder',
+  name: 'Shaper',
+  rig: 'shaper',
+  role: 'builder',
+  survival: true,
+  description: 'Your Builder hero. Mine crystal fields, wall yourself in with Barricade Wards, build turrets and level up to 11.',
+  cost: { crystals: 0, flux: 0 },
+  supply: 0,
+  hp: 45,
+  barrier: 40,
+  speed: 4.05,
+  radius: 0.4,
+  sight: 9,
+  weapon: { damage: 4, hits: 1, cooldown: 1.07, range: 0.1, windup: 0.12, hitInterval: 0, upgradePerLevel: 0 },
+  scale: 1.2,
+};
+UNITS.hunter = {
+  ...UNITS.lancer,
+  id: 'hunter',
+  name: 'Lancer Hunter',
+  rig: 'lancer',
+  role: 'hunter',
+  survival: true,
+  description: 'Your Hunter hero. Track down every Shaper. Spend essence on blades, armor and more.',
+  cost: { crystals: 0, flux: 0 },
+  supply: 0,
+  hp: 220,
+  barrier: 100,
+  armor: 1,
+  speed: 3.7,
+  radius: 0.6,
+  sight: 11,
+  weapon: { damage: 12, hits: 2, cooldown: 0.857, range: 0.15, windup: 0.18, hitInterval: 0.14, upgradePerLevel: 0 },
+  lunge: { range: 4, cooldown: 9, speed: 9, maxDuration: 1.4, bonusDamage: 10 },
+  scale: 1.45,
+};
+
 // Footprints are in cells. Structures with `needsPower` must be inside a Conduit field.
 export const BUILDINGS = {
   citadel: {
@@ -204,6 +245,25 @@ export const BUILDINGS = {
     priority: 11,
   },
 };
+
+// Survival-mode Builder structures (stats scale with the Builder's level, see data/survival.js)
+const survivalStructure = (o) => ({
+  supply: 0,
+  sight: 6,
+  needsPower: false,
+  requires: [],
+  trains: [],
+  research: [],
+  priority: 11,
+  survival: true,
+  size: 2,
+  armor: 1,
+  ...o,
+});
+BUILDINGS.barricade = survivalStructure({ id: 'barricade', name: 'Barricade Ward', description: 'Crystal wall block with a small power field.', cost: { crystals: 15, flux: 0 }, buildTime: 3, hp: 300, barrier: 0, armor: 2, hotkey: 'W', priority: 9 });
+BUILDINGS.turret = survivalStructure({ id: 'turret', name: 'Spire Turret', description: 'Shoots crystal bolts at Hunters.', cost: { crystals: 90, flux: 0 }, buildTime: 8, hp: 180, barrier: 100, hotkey: 'T', sight: 8 });
+BUILDINGS.mender = survivalStructure({ id: 'mender', name: 'Mending Well', description: 'Restores barriers of nearby friendly structures.', cost: { crystals: 100, flux: 0 }, buildTime: 10, hp: 160, barrier: 160, hotkey: 'M', energy: { start: 100, max: 100 } });
+BUILDINGS.lanceTurret = survivalStructure({ id: 'lanceTurret', name: 'Lance Turret', description: 'Long-range heavy turret.', cost: { crystals: 175, flux: 0 }, buildTime: 12, hp: 240, barrier: 120, armor: 2, hotkey: 'L', sight: 10 });
 
 // Researches. Leveled upgrades have one entry per level.
 export const RESEARCH = {

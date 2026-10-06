@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-single
+release
+build-tmp
+test-results
+playwright-report
+.git
+docs

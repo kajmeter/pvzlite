@@ -48,5 +48,84 @@
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "build": {
+    "appId": "io.github.kajmeter.shardfall",
+    "productName": "Shardfall",
+    "copyright": "Copyright (c) 2026 kajmeter. Licensed under Apache-2.0.",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "server/**/*",
+      "src/shared/**/*",
+      "build/icon.png",
+      "package.json",
+      "!**/*.map"
+    ],
+    "asar": true,
+    "artifactName": "Shardfall-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Shardfall",
+      "artifactName": "Shardfall-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Shardfall-Portable-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "deb",
+        "AppImage"
+      ],
+      "category": "Game",
+      "icon": "build/icons",
+      "executableName": "shardfall",
+      "maintainer": "kajmeter <kajetankarp@gmail.com>",
+      "vendor": "kajmeter",
+      "synopsis": "3D real-time strategy game built with three.js",
+      "description": "Shardfall is a fast 3D real-time strategy game: harvest crystals with Shaper drones, build a crystal citadel and command Lancer knights against AI or friends over LAN/Internet.",
+      "desktop": {
+        "entry": {
+          "Name": "Shardfall",
+          "Comment": "3D real-time strategy game",
+          "Categories": "Game;StrategyGame;",
+          "StartupWMClass": "Shardfall"
+        }
+      }
+    },
+    "deb": {
+      "artifactName": "shardfall_${version}_amd64.${ext}"
+    },
+    "appImage": {
+      "artifactName": "Shardfall-${version}-x86_64.${ext}"
+    },
+    "publish": null
+  },
+  "desktopName": "shardfall.desktop"
 }
