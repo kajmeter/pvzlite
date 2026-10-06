@@ -1,11 +1,13 @@
 # pvzlite — notes for contributors and AI assistants
 
-pvzlite (Shapers vs Lancers) is a three.js survival RTS in the spirit of the "probes vs zealots"
-custom games: Shaper builders mine crystal groves, wall in with Barricade Wards, build turrets and
-level up to 11; Lancer Hunters upgrade blades/armor/etc. with essence and break in. A full classic
-RTS mode is included. Shared deterministic simulation (`src/shared`, survival rules in
-`src/shared/sim/survival.js` + `src/shared/data/survival.js`), browser/Electron client
-(`src/client`, `desktop/`) and a Node.js multiplayer server (`server/`). See README.md.
+pvzlite (Shapers vs Lancer) is a three.js remake of the StarCraft II arcade mode *Probes vs
+Zealot 2* with original characters: Shapers (probes) build a Generator for gas, wall in, trade at
+the Market, build turrets, miners and auto mines; one Lancer (zealot) feeds on structure damage
+and buys blades/armor/life at the central Shop. The rules are specified in
+`docs/design/pvz-mode.md` (keep it in sync with the code). A full classic RTS mode is included.
+Shared deterministic simulation (`src/shared`, survival rules in `src/shared/sim/survival.js` +
+`src/shared/data/survival.js`), browser/Electron client (`src/client`, `desktop/`) and a Node.js
+multiplayer server (`server/`). See README.md.
 
 ## ⚠️ Very important rule: every update ships ready-to-download binaries
 
@@ -19,6 +21,12 @@ RTS mode is included. Shared deterministic simulation (`src/shared`, survival ru
   If it failed, fix it and push again — a red release pipeline is never "done".
 - These asset names are linked from README.md (`releases/latest/download/<name>`).
   Never rename them without updating every README link.
+
+## Always push
+
+Commit and push every finished, verified change to the working branch right away — don't wait
+to be asked. Never push a broken state (see the checks below), because every push publishes a
+release.
 
 ## Before pushing
 
