@@ -1,24 +1,37 @@
 // Network protocol shared by the server and the browser client.
 // The server runs the authoritative World and streams compact per-player snapshots.
 import { TICK_RATE } from '../constants.js';
+import { unitSpeed } from '../sim/behavior.js';
 
 export const PROTOCOL_VERSION = 1;
 export const SNAPSHOT_EVERY = 2; // ticks between snapshots (10 Hz)
 export const SNAPSHOT_INTERVAL = SNAPSHOT_EVERY / TICK_RATE;
 
-const TYPES = ['shaper', 'lancer', 'citadel', 'conduit', 'siphon', 'portal', 'foundry', 'archive', 'sanctum', 'aegis', 'crystal', 'vent', 'beacon', 'rubble', 'builder', 'hunter', 'barricade', 'turret', 'mender', 'lanceTurret'];
+// Append only: indices are part of the wire format.
+const TYPES = [
+  'shaper', 'lancer', 'citadel', 'conduit', 'siphon', 'portal', 'foundry', 'archive', 'sanctum', 'aegis', 'crystal', 'vent', 'beacon', 'rubble',
+  'builder', 'hunter', 'barricade', 'turret', 'mender', 'lanceTurret',
+  // survival (Shapers vs Lancer)
+  'generator', 'wall', 'market', 'depot', 'autoMine', 'library', 'detector', 'shop', 'lancerHero', 'spirit', 'miner', 'warden',
+];
 export const TYPE_INDEX = Object.fromEntries(TYPES.map((t, i) => [t, i]));
 export const TYPE_NAME = TYPES;
 
 const r1 = (v) => Math.round(v * 100) / 100;
 
 // Events worth forwarding to clients (only if the player can see them / owns them)
-const PUBLIC_EVENTS = new Set(['strike', 'hit', 'death', 'lunge', 'warpStart', 'warped', 'eliminated', 'gameOver', 'bolt', 'sprint']);
-const OWNER_EVENTS = new Set(['buildStart', 'buildDone', 'trained', 'research', 'error', 'alert', 'phase', 'overclock', 'upgraded', 'mined']);
+const PUBLIC_EVENTS = new Set(['strike', 'hit', 'death', 'lunge', 'warpStart', 'warped', 'eliminated', 'gameOver', 'bolt', 'pickupSpawn']);
+const OWNER_EVENTS = new Set([
+  'buildStart', 'buildDone', 'trained', 'research', 'error', 'alert', 'phase', 'overclock', 'upgraded', 'mined',
+  // survival
+  'upgradeStart', 'salvageStart', 'salvaged', 'cancelled', 'trade', 'bought', 'sold', 'pickup', 'share', 'exchange', 'abilitiesPicked',
+]);
 // survival announcements everybody receives
-const GLOBAL_EVENTS = new Set(['release', 'builderDown', 'hunterDown', 'levelUp', 'reveal', 'respawn']);
+const GLOBAL_EVENTS = new Set(['lancerArrives', 'unlock', 'shaperDown', 'lancerDown', 'hunterDown', 'spiritDown', 'form', 'respawn']);
+// survival events seen by the caster's team, or by anyone who can see the spot
+const TEAM_EVENTS = new Set(['ability', 'scan']);
 
-function unitRow(u, own) {
+function unitRow(u, own, world) {
   const row = [
     u.id,
     TYPE_INDEX[u.type],
@@ -37,16 +50,35 @@ function unitRow(u, own) {
     u.warpTotal ? r1(u.warpTotal) : 0,
   ];
   row.push(own ? [u.orders.length === 0 ? 1 : 0, u.autocast?.lunge === false ? 0 : 1] : 0);
-  // hero stats change with levels / upgrades (survival)
-  row.push(
-    u.def.survival
-      ? [u.maxHp, u.maxBarrier, u.armor, r1(u.speedOverride || 0), r1(u.damage || 0), r1(u.structureBonus || 1), u.mineYield || 0, u.caged ? 1 : 0, u.sprintUntil > 0 ? 1 : 0]
-      : 0,
-  );
+  // survival unit state (see docs/design/pvz-mode.md §14)
+  row.push(survivalUnitRow(u, world));
   return row;
 }
 
-function buildingRow(b, own) {
+const left = (until, tick) => (until > tick ? r1((until - tick) / TICK_RATE) : 0);
+
+function survivalUnitRow(u, world) {
+  if (!u.def.survival || !world) return 0;
+  const t = world.tick;
+  return [
+    Math.ceil(u.maxHp),
+    Math.ceil(u.maxBarrier),
+    u.tier || 0,
+    left(u.stasisUntil, t),
+    u.cloakUntil > t ? 1 : 0,
+    u.invulnUntil > t ? 1 : 0,
+    left(u.immuneUntil, t),
+    left(u.decayUntil, t),
+    r1(u.damage || 0),
+    r1(u.strikeCooldown || (u.def.weapon ? u.def.weapon.cooldown : 0)),
+    Math.round((u.dr || 0) * 10000) / 10000,
+    r1(u.regen || 0),
+    r1(unitSpeed(world, u)),
+    r1(u.sight || u.def.sight),
+  ];
+}
+
+function buildingRow(b, own, world) {
   const row = [
     b.id,
     TYPE_INDEX[b.type],
@@ -68,14 +100,37 @@ function buildingRow(b, own) {
           Math.floor(b.energy * 10) / 10,
           r1(b.warpCd || 0),
           r1(b.transform || 0),
-          b.queue.map((q) => [q.kind === 'unit' ? 0 : 1, q.id, r1(q.progress), q.time, q.level || 0]),
+          b.queue.map((q) => [q.kind === 'unit' ? 0 : 1, q.id, r1(q.progress), q.time, q.level || q.tier || 0]),
           b.rally ? [r1(b.rally.x), r1(b.rally.y), b.rally.target || 0] : 0,
           b.vent ? b.vent.amount : -1,
         ]
       : 0,
   );
-  row.push(b.def.survival ? [b.maxHp, b.maxBarrier, b.level || 0, r1(b.aim || 0), r1(b.weaponDamage || 0), b.weaponRange || 0] : 0);
+  row.push(survivalBuildingRow(b, world));
   return row;
+}
+
+function survivalBuildingRow(b, world) {
+  if (!b.def.survival || !world) return 0;
+  const t = world.tick;
+  return [
+    Math.ceil(b.maxHp),
+    Math.ceil(b.maxBarrier),
+    b.level || 0,
+    r1(Math.max(0, b.upgrading || 0)),
+    r1(b.upgradeTotal || 0),
+    r1(Math.max(0, b.salvaging || 0)),
+    b.ceaseFire ? 1 : 0,
+    r1(b.aim || 0),
+    b.dr || 0,
+    b.weaponDamage || 0,
+    b.weaponRange || 0,
+    b.weaponCooldown || 0,
+    left(b.overchargeUntil, t),
+    left(b.invulnUntil, t),
+    r1(b.buildTime || b.def.buildTime || 0),
+    b.upgradeTo || 0,
+  ];
 }
 
 /** Builds the snapshot a given player is allowed to see. */
@@ -87,13 +142,13 @@ export function makeSnapshot(world, playerId, events, full = false) {
   for (const u of world.units) {
     if (u.dead) continue;
     const own = u.owner === playerId;
-    if (own || world.isAllied(u.owner, playerId) || vis(u)) units.push(unitRow(u, own));
+    if (own || world.isAllied(u.owner, playerId) || vis(u)) units.push(unitRow(u, own, world));
   }
   const buildings = [];
   for (const b of world.buildings) {
     if (b.dead) continue;
     const own = b.owner === playerId;
-    if (own || world.isAllied(b.owner, playerId) || vis(b)) buildings.push(buildingRow(b, own));
+    if (own || b.owner < 0 || world.isAllied(b.owner, playerId) || vis(b)) buildings.push(buildingRow(b, own, world));
   }
   // resources: amounts only where visible (positions are known from the map)
   const resources = [];
@@ -112,6 +167,10 @@ export function makeSnapshot(world, playerId, events, full = false) {
       outEvents.push(ev);
       continue;
     }
+    if (TEAM_EVENTS.has(ev.e)) {
+      if (playerId < 0 || world.isAllied(ev.owner, playerId) || (ev.x !== undefined && world.isVisibleTo({ kind: 'point', x: ev.x, y: ev.y }, playerId))) outEvents.push(ev);
+      continue;
+    }
     if (OWNER_EVENTS.has(ev.e)) {
       if (ev.owner === playerId || (ev.e === 'overclock' && world.byId.get(ev.id)?.owner === playerId) || (ev.e === 'phase' && world.byId.get(ev.id)?.owner === playerId)) outEvents.push(ev);
     } else if (PUBLIC_EVENTS.has(ev.e)) {
@@ -119,12 +178,11 @@ export function makeSnapshot(world, playerId, events, full = false) {
       else if (ev.x !== undefined ? playerId < 0 || world.isVisibleTo({ kind: 'point', x: ev.x, y: ev.y }, playerId) || ev.owner === playerId : true) outEvents.push(ev);
     }
   }
+  const survivalMode = world.mode === 'survival';
   const players = world.players.map((pl) => ({
     id: pl.id,
     eliminated: pl.eliminated,
-    ...(world.mode === 'survival'
-      ? { role: pl.role, level: pl.level, lives: pl.lives, heroId: pl.heroId, deaths: pl.deaths, hunterUp: pl.hunterUp, respawnAt: pl.respawnAt, stats: { builderKills: pl.stats.builderKills, hunterKills: pl.stats.hunterKills } }
-      : {}),
+    ...(survivalMode ? survivalPlayer(world, pl, pl.id === playerId) : {}),
     // only reveal economy details for yourself
     ...(pl.id === playerId
       ? {
@@ -134,16 +192,10 @@ export function makeSnapshot(world, playerId, events, full = false) {
           supplyCap: pl.supplyCap,
           upgrades: pl.upgrades,
           researching: pl.researching,
-          essence: Math.floor(pl.essence || 0),
-          sprintCd: r1(pl.sprintCd || 0),
-          revealCd: r1(pl.revealCd || 0),
         }
       : { upgrades: pl.upgrades }),
   }));
-  const sv = world.survival;
-  const survival = sv
-    ? { phase: sv.phase, releaseIn: Math.max(0, (sv.releaseTick - world.tick) / TICK_RATE), timeLeft: Math.max(0, (sv.endTick - world.tick) / TICK_RATE), reason: sv.reason }
-    : null;
+  const survival = survivalMode ? survivalGlobal(world, playerId) : null;
   // vision as run-length encoded bytes (visible / explored)
   let vision = null;
   if (p) vision = rle(world.vision[team], world.explored[team]);
@@ -160,6 +212,72 @@ export function makeSnapshot(world, playerId, events, full = false) {
     survival,
     over: world.over ? 1 : 0,
     winnerTeam: world.winnerTeam,
+  };
+}
+
+function survivalPlayer(world, pl, own) {
+  const out = {
+    role: pl.role,
+    form: pl.form,
+    team: pl.team,
+    alive: pl.alive ? 1 : 0,
+    heroId: pl.heroId,
+    respawnAt: pl.respawnAt,
+    pendingForm: pl.pendingForm,
+    items: pl.form === 'lancer' || pl.form === 'hunter' ? pl.items.slice() : [],
+    stats: { fed: Math.floor(pl.stats.fed || 0), shapersKilled: pl.stats.shapersKilled || 0, deaths: pl.stats.deaths || 0 },
+  };
+  if (own) {
+    out.gas = Math.floor(pl.gas * 100) / 100;
+    out.minerals = Math.floor(pl.minerals * 100) / 100;
+    out.abilities = pl.abilities.slice();
+    const cd = {};
+    for (const k in pl.cd) if (pl.cd[k] > 0) cd[k] = r1(pl.cd[k]);
+    out.cooldowns = cd;
+    let gen = 0;
+    let miners = 0;
+    for (const b of world.buildings) {
+      if (b.owner !== pl.id || b.dead) continue;
+      if (b.type === 'generator') gen = Math.max(gen, b.level);
+      if (b.type === 'depot') for (const q of b.queue) if (q.id === 'miner') miners++;
+    }
+    for (const u of world.units) if (u.owner === pl.id && u.type === 'miner' && !u.dead) miners++;
+    out.genLevel = gen;
+    out.minersCount = miners;
+  }
+  return out;
+}
+
+const PICKUP_TYPES = { gasBonus: 0, pallet: 1 };
+
+function survivalGlobal(world, playerId) {
+  const sv = world.survival;
+  const t = world.tick;
+  const p = playerId >= 0 ? world.players[playerId] : null;
+  const pickups = [];
+  for (const k of world.pickups) {
+    if (playerId >= 0 && !world.isVisibleTo({ kind: 'point', x: k.x, y: k.y }, playerId)) continue;
+    pickups.push([k.id, PICKUP_TYPES[k.type] ?? 0, r1(k.x), r1(k.y), Math.round(k.amount), k.expires >= 0 ? r1((k.expires - t) / TICK_RATE) : -1]);
+  }
+  const scans = [];
+  for (const s of sv.scans) {
+    if (s.until <= t || (p && s.team !== p.team)) continue;
+    scans.push([r1(s.x), r1(s.y), s.r, r1((s.until - t) / TICK_RATE)]);
+  }
+  const fields = sv.fields.map((f) => [f.id, f.bx, f.by, r1((f.until - t) / TICK_RATE), f.owner]);
+  return {
+    phase: sv.phase,
+    lancerIn: Math.max(0, r1((sv.lancerTick - t) / TICK_RATE)),
+    unlockIn: Math.max(0, r1((sv.unlockTick - t) / TICK_RATE)),
+    elapsed: r1(t / TICK_RATE),
+    timeLeft: sv.endTick >= 0 ? Math.max(0, r1((sv.endTick - t) / TICK_RATE)) : -1,
+    price: sv.price,
+    reason: sv.reason,
+    pace: world.options.pace || 1,
+    shopId: sv.shopId,
+    pickups,
+    scans,
+    fields,
   };
 }
 

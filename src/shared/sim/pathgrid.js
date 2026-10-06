@@ -102,6 +102,40 @@ export class PathGrid {
     return null;
   }
 
+  // 2x2 block (x..x+1, y..y+1) fully pathable: used by clearance-2 units (Lancer, Hunters)
+  blockFree(x, y) {
+    return this.pathable(x, y) && this.pathable(x + 1, y) && this.pathable(x, y + 1) && this.pathable(x + 1, y + 1);
+  }
+
+  // Nearest free 2x2 block to a world point. Returns the block's top-left cell [bx, by]
+  // (its centre, where a big unit stands, is (bx + 1, by + 1)).
+  nearestFreeBlock(x, y, maxR = 16) {
+    const cx = Math.round(x) - 1;
+    const cy = Math.round(y) - 1;
+    if (this.blockFree(cx, cy)) return [cx, cy];
+    let best = null;
+    let bestD = Infinity;
+    for (let r = 1; r <= maxR; r++) {
+      for (let oy = -r; oy <= r; oy++) {
+        for (let ox = -r; ox <= r; ox++) {
+          if (Math.abs(ox) !== r && Math.abs(oy) !== r) continue;
+          const nx = cx + ox;
+          const ny = cy + oy;
+          if (!this.blockFree(nx, ny)) continue;
+          const dx = nx + 1 - x;
+          const dy = ny + 1 - y;
+          const d = dx * dx + dy * dy;
+          if (d < bestD) {
+            bestD = d;
+            best = [nx, ny];
+          }
+        }
+      }
+      if (best) return best;
+    }
+    return null;
+  }
+
   // Grid line-of-walk test between two world points (supercover traversal).
   lineWalkable(x0, y0, x1, y1) {
     let cx = Math.floor(x0);
@@ -198,6 +232,7 @@ export class PathGrid {
    * Returns array of [x,y] world waypoints (excluding start) or null.
    */
   findPath(sx, sy, gx, gy, opts = {}) {
+    if (opts.clearance === 2) return this.findPathBig(sx, sy, gx, gy, opts);
     const W = this.W;
     const rect = opts.rect || null;
     const maxNodes = opts.maxNodes || 12000;
@@ -320,6 +355,134 @@ export class PathGrid {
       pts[pts.length - 1] = [goalX, goalY];
     }
     return this.smooth(sx, sy, pts, opts.radius || 0.4, found >= 0);
+  }
+
+  // A* for 2-cell-wide units: node (x, y) is the 2x2 block x..x+1, y..y+1; waypoints are
+  // block centres (x + 1, y + 1). 1-cell gaps (e.g. beside a wall on a 4-wide ramp) are impassable.
+  // The returned array has `partial = true` when the goal could not be reached.
+  findPathBig(sx, sy, gx, gy, opts = {}) {
+    const W = this.W;
+    const rect = opts.rect || null;
+    const maxNodes = opts.maxNodes || 16000;
+    let start = [Math.round(sx) - 1, Math.round(sy) - 1];
+    if (!this.blockFree(start[0], start[1])) {
+      const nf = this.nearestFreeBlock(sx, sy, 4);
+      if (!nf) return null;
+      start = nf;
+    }
+    let goalCell = null;
+    let goalX = gx;
+    let goalY = gy;
+    if (!rect) {
+      const gbx = Math.round(gx) - 1;
+      const gby = Math.round(gy) - 1;
+      if (this.blockFree(gbx, gby)) goalCell = [gbx, gby];
+      else {
+        goalCell = this.nearestFreeBlock(gx, gy, 24);
+        if (!goalCell) return null;
+        goalX = goalCell[0] + 1;
+        goalY = goalCell[1] + 1;
+      }
+    }
+    const gapMax = rect ? (opts.pad ?? 1) - 1 : 0;
+    const isGoal = (x, y) => {
+      if (rect) {
+        const gx2 = Math.max(rect.x - (x + 2), 0, x - (rect.x + rect.w));
+        const gy2 = Math.max(rect.y - (y + 2), 0, y - (rect.y + rect.h));
+        return Math.max(gx2, gy2) <= gapMax;
+      }
+      return x === goalCell[0] && y === goalCell[1];
+    };
+    const heur = (x, y) => {
+      let dx;
+      let dy;
+      if (rect) {
+        const px = x + 1;
+        const py = y + 1;
+        dx = Math.max(rect.x - px, 0, px - (rect.x + rect.w));
+        dy = Math.max(rect.y - py, 0, py - (rect.y + rect.h));
+      } else {
+        dx = Math.abs(x - goalCell[0]);
+        dy = Math.abs(y - goalCell[1]);
+      }
+      const mn = Math.min(dx, dy);
+      return (dx + dy + (SQRT2 - 2) * mn) * 1.001;
+    };
+    this.gen++;
+    if (this.gen > 0xfffffff0) {
+      this.seen.fill(0);
+      this.closed.fill(0);
+      this.gen = 1;
+    }
+    const gen = this.gen;
+    const g = this.g;
+    const from = this.from;
+    const seen = this.seen;
+    const closed = this.closed;
+    this.heapSize = 0;
+    const si = start[1] * W + start[0];
+    g[si] = 0;
+    from[si] = -1;
+    seen[si] = gen;
+    this._push(si, heur(start[0], start[1]));
+    let bestI = si;
+    let bestH = heur(start[0], start[1]);
+    let found = -1;
+    let expanded = 0;
+    while (this.heapSize > 0) {
+      const ci = this._pop();
+      if (closed[ci] === gen) continue;
+      closed[ci] = gen;
+      const cx = ci % W;
+      const cy = (ci - cx) / W;
+      if (isGoal(cx, cy)) {
+        found = ci;
+        break;
+      }
+      if (++expanded > maxNodes) break;
+      const cg = g[ci];
+      for (let d = 0; d < 8; d++) {
+        const [ox, oy, cost] = DIRS[d];
+        const nx = cx + ox;
+        const ny = cy + oy;
+        if (!this.blockFree(nx, ny)) continue;
+        if (ox !== 0 && oy !== 0) {
+          if (!this.blockFree(cx + ox, cy) || !this.blockFree(cx, cy + oy)) continue;
+        }
+        const ni = ny * W + nx;
+        if (closed[ni] === gen) continue;
+        const ng = cg + cost;
+        if (seen[ni] !== gen || ng < g[ni]) {
+          seen[ni] = gen;
+          g[ni] = ng;
+          from[ni] = ci;
+          const h = heur(nx, ny);
+          if (h < bestH) {
+            bestH = h;
+            bestI = ni;
+          }
+          this._push(ni, ng + h);
+        }
+      }
+    }
+    const endI = found >= 0 ? found : bestI;
+    const cells = [];
+    let k = endI;
+    let guard = 0;
+    while (k !== -1 && guard++ < 100000) {
+      cells.push(k);
+      if (k === si) break;
+      k = from[k];
+    }
+    cells.reverse();
+    const pts = cells.map((ci) => {
+      const x = ci % W;
+      return [x + 1, (ci - x) / W + 1];
+    });
+    if (found >= 0 && !rect && pts.length) pts[pts.length - 1] = [goalX, goalY];
+    const out = this.smooth(sx, sy, pts, Math.max(opts.radius || 0.9, 0.9));
+    out.partial = found < 0;
+    return out;
   }
 
   smooth(sx, sy, pts, r) {

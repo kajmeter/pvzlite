@@ -51,22 +51,20 @@ export function updateVision(world) {
     if (u.dead || u.owner < 0) continue;
     const team = world.players[u.owner].team;
     const vl = viewerLevel(map, u.x, u.y);
-    stamp(map, world.vision[team], world.explored[team], u.x, u.y, u.hidden ? 2 : u.def.sight, vl);
+    stamp(map, world.vision[team], world.explored[team], u.x, u.y, u.hidden ? 2 : u.sight || u.def.sight, vl);
   }
   for (const b of world.buildings) {
     if (b.dead || b.owner < 0) continue;
     const team = world.players[b.owner].team;
     const vl = viewerLevel(map, b.x, b.y);
-    stamp(map, world.vision[team], world.explored[team], b.x, b.y, b.built ? b.def.sight : 4, vl);
+    // survival Lancer Detector sees over cliffs (it is a tall tower)
+    stamp(map, world.vision[team], world.explored[team], b.x, b.y, b.built ? b.def.sight : 4, b.type === 'detector' && b.built ? 99 : vl);
   }
-  // survival: Hunter reveal pulse exposes every Shaper briefly
-  if (world.mode === 'survival') {
-    for (const p of world.players) {
-      if (p.role !== 'hunter' || !(p.revealUntil > world.tick)) continue;
-      for (const u of world.units) {
-        if (u.dead || u.type !== 'builder') continue;
-        stamp(map, world.vision[p.team], world.explored[p.team], u.x, u.y, 3.5, 99);
-      }
+  // survival: active Scans reveal a circle (high ground included) for the scanning team
+  if (world.mode === 'survival' && world.survival) {
+    for (const sc of world.survival.scans) {
+      if (sc.until <= world.tick || !world.vision[sc.team]) continue;
+      stamp(map, world.vision[sc.team], world.explored[sc.team], sc.x, sc.y, sc.r, 99);
     }
   }
   for (const n of world.neutrals) {

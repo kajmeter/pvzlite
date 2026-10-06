@@ -44,6 +44,10 @@ import {
   canPlaceSurvival,
   placeSurvival,
   updateSurvivalBuilding,
+  isDetected,
+  onSurvivalDamage,
+  assignMiner,
+  minerWork,
 } from './survival.js';
 
 let groupSerial = 1;
@@ -363,6 +367,7 @@ export class World {
     b.built = true;
     b.progress = 1;
     const p = this.players[b.owner];
+    if (!p) return;
     p.stats.structuresBuilt++;
     this.recomputeSupply(p);
     if (b.type === 'citadel' && !b.rally) b.rally = this.defaultRally(b);
@@ -491,6 +496,8 @@ export class World {
   isVisibleTo(e, playerId) {
     if (playerId < 0) return true;
     if (e.owner !== undefined && e.owner >= 0 && this.isAllied(e.owner, playerId)) return true;
+    // survival: cloaked units are only seen inside the viewer team's Scans / Detector range
+    if (this.mode === 'survival' && e.kind === 'unit' && e.cloakUntil > this.tick && !isDetected(this, e, this.players[playerId].team)) return false;
     const vis = this.vision[this.players[playerId].team];
     const W = this.map.width;
     if (e.kind === 'building' || e.kind === 'resource' || e.kind === 'neutral') {
@@ -599,10 +606,17 @@ export class World {
     return best;
   }
 
-  survivalMine(u, amount) {
-    const p = this.players[u.owner];
-    p.crystals += amount;
-    p.stats.crystalsMined += amount;
+  // survival hooks used by behavior.js / combat.js
+  assignMiner(u) {
+    return assignMiner(this, u);
+  }
+
+  minerWork(u, res, o) {
+    minerWork(this, u, res, o);
+  }
+
+  onSurvivalDamage(attacker, target, dealt) {
+    onSurvivalDamage(this, attacker, target, dealt);
   }
 
   deposit(u) {
@@ -845,14 +859,7 @@ export class World {
     resolveCollisions(this);
     const bl = this.buildings;
     if (this.mode === 'survival') {
-      for (let i = 0; i < bl.length; i++) {
-        const b = bl[i];
-        if (b.dead) continue;
-        if (b.def.survival) {
-          if (!b.built) updateBuilding(this, b);
-          else updateSurvivalBuilding(this, b);
-        }
-      }
+      for (let i = 0; i < bl.length; i++) if (!bl[i].dead) updateSurvivalBuilding(this, bl[i]);
     } else {
       for (let i = 0; i < bl.length; i++) if (!bl[i].dead) updateBuilding(this, bl[i]);
     }
@@ -872,7 +879,7 @@ export class World {
     this.removeDead();
     if (this.tick % 10 === 0) this.updateBeacons();
     if (this.tick % FOG_UPDATE_TICKS === 0) updateVision(this);
-    if (this.tick % 20 === 0 || (this.mode === 'survival' && this.tick >= this.survival.endTick)) this.checkVictory();
+    if (this.tick % 20 === 0 || (this.mode === 'survival' && this.survival.endTick >= 0 && this.tick >= this.survival.endTick)) this.checkVictory();
     if (this.tick % (TICK_RATE * 10) === 0) this.sampleStats();
   }
 
@@ -895,6 +902,10 @@ export class World {
     p.eliminated = true;
     p.heroId = 0;
     p.respawnAt = -1;
+    if (this.mode === 'survival') {
+      p.alive = false;
+      p.pendingForm = -1;
+    }
     for (const e of this.entities) {
       if (e.owner === p.id && !e.dead && (e.kind === 'unit' || e.kind === 'building')) this.kill(e, null, true);
     }
@@ -950,13 +961,13 @@ export class World {
 
   // ---------------------------------------------------------------- helpers used by UI / AI / tests
 
-  canPlace(owner, type, bx, by) {
-    if (this.mode === 'survival') return canPlaceSurvival(this, owner, type, bx, by);
+  canPlace(owner, type, bx, by, level = 1) {
+    if (this.mode === 'survival') return canPlaceSurvival(this, owner, type, bx, by, level);
     return canPlace(this, owner, type, bx, by);
   }
 
-  placeBuilding(owner, type, bx, by, builder) {
-    if (this.mode === 'survival') return placeSurvival(this, owner, type, bx, by, builder);
+  placeBuilding(owner, type, bx, by, builder, level = 1) {
+    if (this.mode === 'survival') return placeSurvival(this, owner, type, bx, by, builder, level);
     return placeBuilding(this, owner, type, bx, by, builder);
   }
 

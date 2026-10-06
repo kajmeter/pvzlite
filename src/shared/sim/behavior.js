@@ -10,7 +10,6 @@ import {
 import { edgeDist, angleLerp, closestPoint } from './geom.js';
 import { startSwing, updateSwing, acquireTarget, canTarget } from './combat.js';
 
-const SURVIVAL_MINE_TIME = 2.0;
 const isWorker = (u) => u.def.role === 'worker' || u.def.role === 'builder';
 
 const ARRIVE_EPS = 0.12;
@@ -18,6 +17,13 @@ const ARRIVE_EPS = 0.12;
 // ---------------------------------------------------------------- movement
 
 export function unitSpeed(world, u) {
+  if (world.mode === 'survival') {
+    // survival: hero speeds come from items / abilities (cloak and Swiftness: +50%)
+    let s = u.speedOverride || u.def.speed;
+    if (u.cloakUntil > world.tick) s *= 1.5;
+    if (u.swift) s *= 1.5;
+    return s;
+  }
   if (u.lunging > 0) return u.def.lunge.speed;
   if (u.speedOverride) return u.speedOverride * (u.sprintUntil > world.tick ? 1.6 : 1);
   const p = world.players[u.owner];
@@ -75,11 +81,13 @@ export function moveTo(world, u, gx, gy, opts = {}) {
             rect: target && target.kind !== 'unit' ? rectOf(target) : null,
             radius: u.r,
             pad: 1,
+            clearance: u.def.clearance,
           });
         }
         if (!path) path = [[tx, ty]];
         // for structures: final point = closest point on footprint edge outside it
-        if (target && target.kind !== 'unit' && path.length) {
+        // (not for partial paths of big units: they stop at the closest reachable spot)
+        if (target && target.kind !== 'unit' && path.length && !path.partial) {
           const last = path[path.length - 1];
           const [cx, cy] = closestPoint(target, last[0], last[1]);
           const dx = last[0] - cx;
@@ -99,6 +107,8 @@ export function moveTo(world, u, gx, gy, opts = {}) {
           bestDist: Infinity,
           stuck: 0,
           forceRepath: false,
+          partial: !!path.partial,
+          made: world.tick,
         };
       } else {
         // out of budget this tick: move straight toward goal
@@ -138,6 +148,8 @@ export function moveTo(world, u, gx, gy, opts = {}) {
     if (target) {
       if (edgeDist(u, target) <= tol + 0.05) return 'arrived';
       if (target.kind === 'unit') {
+        // survival: an unreachable unit (e.g. a Shaper behind a 1-cell gap) is re-checked once per second
+        if (nav.partial && world.mode === 'survival' && world.tick - nav.made < 20) return 'moving';
         stepToward(world, u, target.x, target.y, 0);
         nav.forceRepath = true;
         nav.key = '';
@@ -261,6 +273,14 @@ export function updateUnit(world, u) {
     u.nav = null;
     return;
   }
+  if (u.stasisUntil > world.tick) {
+    // survival Stasis Prison: frozen, no orders processed
+    u.nav = null;
+    u.swing = null;
+    u.frozen = true;
+    return;
+  }
+  u.frozen = false;
   updateSwing(world, u, DT);
 
   const o = u.orders[0];
@@ -293,6 +313,9 @@ export function updateUnit(world, u) {
       case 'build':
         orderBuild(world, u, o);
         break;
+      case 'mine':
+        orderMine(world, u, o);
+        break;
       default:
         endOrder(world, u);
     }
@@ -305,6 +328,11 @@ export function updateUnit(world, u) {
 
 function idle(world, u) {
   if (isWorker(u)) return;
+  if (!u.def.weapon) {
+    // survival miners go back to work on their own
+    if (u.def.role === 'miner' && (world.tick + u.id) % 10 === 0) world.assignMiner(u);
+    return;
+  }
   if (!u.guard) u.guard = { x: u.x, y: u.y };
   // auto-acquire
   if (u.target) {
@@ -367,6 +395,11 @@ function orderFollow(world, u, o) {
 function orderAttack(world, u, o) {
   u.guard = null;
   const t = world.byId.get(o.target);
+  if (!u.def.weapon) {
+    // unarmed survival units just walk up to the target
+    if (!t || t.dead || moveTo(world, u, t.x, t.y, { target: t, tolerance: 1, failOk: true }) !== 'moving') endOrder(world, u);
+    return;
+  }
   if (t && !t.dead && t.kind !== 'unit' && t.hp !== undefined && !world.isVisibleTo(t, u.owner)) {
     // structure hidden in the fog: walk to it, then attack once it comes into view
     if (moveTo(world, u, t.x, t.y, { target: t, tolerance: u.def.weapon.range + 0.02, failOk: true }) === 'failed') endOrder(world, u);
@@ -382,7 +415,7 @@ function orderAttack(world, u, o) {
 
 function orderHold(world, u) {
   u.nav = null;
-  if (isWorker(u)) return;
+  if (isWorker(u) || !u.def.weapon) return;
   let t = u.target ? world.byId.get(u.target) : null;
   if (!t || !canTarget(world, u, t) || edgeDist(u, t) > u.def.weapon.range + 0.15) {
     t = acquireTarget(world, u, u.def.weapon.range + 0.15);
@@ -393,6 +426,10 @@ function orderHold(world, u) {
 
 function orderAttackMove(world, u, o) {
   u.guard = null;
+  if (!u.def.weapon) {
+    orderMove(world, u, o);
+    return;
+  }
   let t = u.target ? world.byId.get(u.target) : null;
   if (t && !canTarget(world, u, t)) {
     t = null;
@@ -553,7 +590,7 @@ export function orderGather(world, u, o) {
         }
         res.miner = u.id;
         o.phase = 'mining';
-        o.timer = world.mode === 'survival' ? SURVIVAL_MINE_TIME : MINE_TIME;
+        o.timer = MINE_TIME;
       }
       break;
     }
@@ -573,7 +610,7 @@ export function orderGather(world, u, o) {
         }
         res.miner = u.id;
         o.phase = 'mining';
-        o.timer = world.mode === 'survival' ? SURVIVAL_MINE_TIME : MINE_TIME;
+        o.timer = MINE_TIME;
       } else if ((world.tick + u.id) % 10 === 0) {
         const alt = world.findFreeCrystal(res, u, 5);
         if (alt) {
@@ -584,24 +621,11 @@ export function orderGather(world, u, o) {
       break;
     }
     case 'mining': {
-      u.ghost = world.mode !== 'survival';
+      u.ghost = true;
       u.mining = res.id;
       const [cx, cy] = closestPoint(res, u.x, u.y);
       if (!isSiphon) u.targetFacing = Math.atan2(cy - u.y, cx - u.x);
       o.timer -= DT;
-      if (o.timer <= 0 && world.mode === 'survival' && !isSiphon) {
-        const amt = Math.min(u.mineYield || 4, res.amount);
-        res.amount -= amt;
-        world.survivalMine(u, amt);
-        world.emit({ e: 'mined', id: u.id, owner: u.owner, k: 'crystals', n: amt, x: u.x, y: u.y });
-        if (res.amount <= 0) {
-          res.miner = 0;
-          u.mining = 0;
-          world.kill(res, null);
-          o.phase = 'toRes';
-        } else o.timer = SURVIVAL_MINE_TIME;
-        break;
-      }
       if (o.timer <= 0) {
         const src = isSiphon ? res.vent : res;
         const per = isSiphon ? FLUX_PER_TRIP : CRYSTALS_PER_TRIP;
@@ -665,12 +689,42 @@ function orderBuild(world, u, o) {
     return;
   }
   u.nav = null;
-  const res = world.placeBuilding(u.owner, o.building, o.bx, o.by, u);
+  const res = world.placeBuilding(u.owner, o.building, o.bx, o.by, u, o.level);
   const resume = u.lastGather && world.byId.get(u.lastGather) && !world.byId.get(u.lastGather).dead ? u.lastGather : 0;
   endOrder(world, u);
   if (res.ok && u.orders.length === 0 && resume) {
     u.orders.push({ type: 'gather', target: resume });
   }
+}
+
+// ---------------------------------------------------------------- survival miners
+
+// Walk to the assigned mineral field and gather forever (credit handled by the survival rules).
+function orderMine(world, u, o) {
+  u.guard = null;
+  u.ghost = true; // miners never block each other or the Shapers
+  const res = world.byId.get(o.target);
+  if (!res || res.dead) {
+    u.mining = 0;
+    endOrder(world, u);
+    return;
+  }
+  if (o.phase !== 'mining') {
+    const r = moveTo(world, u, res.x, res.y, { target: res, tolerance: 0.35, failOk: true });
+    if (r === 'moving') return;
+    if (r === 'failed' && edgeDist(u, res) > 1.2) {
+      u.mining = 0;
+      endOrder(world, u);
+      return;
+    }
+    u.nav = null;
+    o.phase = 'mining';
+    o.timer = 0;
+  }
+  u.mining = res.id;
+  const [cx, cy] = closestPoint(res, u.x, u.y);
+  u.targetFacing = Math.atan2(cy - u.y, cx - u.x);
+  world.minerWork(u, res, o);
 }
 
 // ---------------------------------------------------------------- collisions
@@ -722,6 +776,7 @@ export function resolveCollisions(world) {
 }
 
 function mobility(u, other) {
+  if (u.frozen) return 0.02;
   if (u.orders[0]?.type === 'hold') return 0.05;
   if (u.engaged) return 0.25;
   if (u.warping > 0) return 0.05;
@@ -735,6 +790,16 @@ export function pushOutOfBlocked(grid, u) {
   const cx = Math.floor(u.x);
   const cy = Math.floor(u.y);
   if (!grid.pathable(cx, cy)) {
+    if (r >= 0.8) {
+      // big (2-cell) units need a free 2x2 block
+      const nb = grid.nearestFreeBlock(u.x, u.y, 12);
+      if (nb) {
+        u.x = nb[0] + 1;
+        u.y = nb[1] + 1;
+        u.nav = null;
+        return;
+      }
+    }
     const nf = grid.nearestFree(u.x, u.y, 12);
     if (nf) {
       // move toward the nearest free cell center
@@ -764,4 +829,38 @@ export function pushOutOfBlocked(grid, u) {
       }
     }
   }
+  // Big units (Lancer, Hunters) must not squeeze through 1-cell gaps: if pushing could not
+  // resolve the overlap, go back to where the unit was at the start of the tick.
+  if (r >= 0.8 && blockedOverlap(grid, u.x, u.y, r) > 0.05) {
+    if (u.px !== undefined && blockedOverlap(grid, u.px, u.py, r) <= 0.05) {
+      u.x = u.px;
+      u.y = u.py;
+    } else {
+      const nb = grid.nearestFreeBlock(u.x, u.y, 12);
+      if (nb) {
+        u.x = nb[0] + 1;
+        u.y = nb[1] + 1;
+      }
+    }
+    u.nav = null;
+  }
+}
+
+// Deepest penetration of a circle into blocked cells.
+export function blockedOverlap(grid, x, y, r) {
+  let worst = 0;
+  const x0 = Math.floor(x - r);
+  const x1 = Math.floor(x + r);
+  const y0 = Math.floor(y - r);
+  const y1 = Math.floor(y + r);
+  for (let cy = y0; cy <= y1; cy++) {
+    for (let cx = x0; cx <= x1; cx++) {
+      if (grid.pathable(cx, cy)) continue;
+      const px = Math.min(Math.max(x, cx), cx + 1);
+      const py = Math.min(Math.max(y, cy), cy + 1);
+      const d = Math.hypot(x - px, y - py);
+      if (r - d > worst) worst = r - d;
+    }
+  }
+  return worst;
 }

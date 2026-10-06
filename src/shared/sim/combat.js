@@ -1,10 +1,11 @@
 // Damage model, weapon swings and target acquisition.
-import { MIN_DAMAGE } from '../constants.js';
+import { MIN_DAMAGE, DT } from '../constants.js';
 import { edgeDist } from './geom.js';
 
 // Applies damage with barrier-first absorption and armor reduction.
 // Returns actual damage dealt (barrier + hull).
 export function applyDamage(world, target, amount, attacker) {
+  if (world.mode === 'survival') return applySurvivalDamage(world, target, amount, attacker);
   if (target.dead || target.hp === undefined) return 0;
   if (target.invulnerable || target.caged) return 0;
   const tp = target.owner >= 0 ? world.players[target.owner] : null;
@@ -46,6 +47,47 @@ export function applyDamage(world, target, amount, attacker) {
   return dealt;
 }
 
+// Survival damage model (spec §5): damage reduction fraction `dr` instead of armor, no armor
+// upgrades, invulnerability / stasis / the Shop ignore damage, and the Lancer feeds on Shaper targets.
+export function applySurvivalDamage(world, target, amount, attacker) {
+  if (target.dead || target.hp === undefined || target.type === 'shop') return 0;
+  if (target.invulnerable || target.invulnUntil > world.tick || target.stasisUntil > world.tick) return 0;
+  const before = target.barrier + target.hp;
+  let remaining = amount * (1 - (target.dr || 0));
+  if (remaining <= 0) return 0;
+  remaining = Math.max(0.01, remaining);
+  let dealt = 0;
+  let hitBarrier = false;
+  if (target.barrier > 0) {
+    hitBarrier = true;
+    if (remaining <= target.barrier) {
+      target.barrier -= remaining;
+      dealt += remaining;
+      remaining = 0;
+    } else {
+      dealt += target.barrier;
+      remaining -= target.barrier;
+      target.barrier = 0;
+    }
+  }
+  if (remaining > 0) {
+    target.hp -= remaining;
+    dealt += remaining;
+  }
+  dealt = Math.min(dealt, before); // feed is capped by what the target had
+  target.lastDamageTick = world.tick;
+  world.emit({ e: 'hit', t: target.id, x: target.x, y: target.y, b: hitBarrier ? 1 : 0, d: Math.round(dealt * 10) / 10 });
+  if (attacker && target.owner >= 0 && attacker.owner >= 0 && attacker.owner !== target.owner) {
+    target.lastAttacker = attacker.id;
+    world.underAttack(target, attacker);
+    const as = world.players[attacker.owner];
+    if (as) as.stats.damageDealt += dealt;
+    world.onSurvivalDamage(attacker, target, dealt);
+  }
+  if (target.hp <= 0) world.kill(target, attacker);
+  return dealt;
+}
+
 export function weaponDamage(world, u, target) {
   if (u.damage) return u.damage * (target && target.kind === 'building' ? u.structureBonus || 1 : 1);
   const w = u.def.weapon;
@@ -57,6 +99,20 @@ export function weaponDamage(world, u, target) {
 export function startSwing(world, u, target) {
   const w = u.def.weapon;
   if (u.cooldown > 0 || u.swing) return false;
+  if (u.strikeCooldown) {
+    // survival heroes: item attack speed, Decay doubles the strike period, attacking breaks cloak.
+    // Faster than one strike per tick is folded into a damage multiplier.
+    let cd = u.strikeCooldown * (u.decayUntil > world.tick ? 2 : 1);
+    const mult = cd < DT ? DT / cd : 1;
+    cd = Math.max(cd, DT);
+    u.cooldown = cd;
+    u.swing = { target: target.id, t: Math.min(w.windup, cd * 0.4), hits: w.hits, interval: w.hitInterval, bonus: 0, mult };
+    if (u.cloakUntil > world.tick) u.cloakUntil = 0;
+    u.lungeHit = false;
+    u.attackAnim = world.tick;
+    world.emit({ e: 'swing', a: u.id, t: target.id });
+    return true;
+  }
   u.cooldown = w.cooldown;
   u.swing = { target: target.id, t: w.windup, hits: w.hits, interval: w.hitInterval, bonus: u.lungeHit ? u.def.lunge.bonusDamage : 0 };
   u.lungeHit = false;
@@ -80,6 +136,8 @@ export function updateSwing(world, u, dt) {
     dmg += s.bonus;
     s.bonus = 0;
   }
+  if (s.mult) dmg *= s.mult;
+  if (u.def.weapon.ranged) world.emit({ e: 'bolt', from: u.id, to: target.id, heavy: 1 });
   applyDamage(world, target, dmg, u);
   world.emit({ e: 'strike', a: u.id, t: target.id, n: s.hits });
   s.hits--;

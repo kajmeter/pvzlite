@@ -50,46 +50,114 @@ export const UNITS = {
   },
 };
 
-// Survival-mode heroes (pvzlite): one Shaper per Builder player, one Lancer per Hunter player.
-// Their stats are recomputed from level / upgrades (see data/survival.js).
-UNITS.builder = {
-  ...UNITS.shaper,
+// Survival-mode units (pvzlite "Shapers vs Lancer", see docs/design/pvz-mode.md).
+// Lancer / Hunter stats are recomputed from shop items (data/survival.js lancerStats).
+const survivalUnit = (o) => ({
+  cost: { crystals: 0, flux: 0 },
+  supply: 0,
+  buildTime: 0,
+  barrier: 0,
+  armor: 0,
+  turnRate: 16,
+  attributes: [],
+  priority: 20,
+  survival: true,
+  clearance: 1,
+  weapon: null,
+  ...o,
+});
+UNITS.builder = survivalUnit({
   id: 'builder',
   name: 'Shaper',
   rig: 'shaper',
   role: 'builder',
-  survival: true,
-  description: 'Your Builder hero. Mine crystal fields, wall yourself in with Barricade Wards, build turrets and level up to 11.',
-  cost: { crystals: 0, flux: 0 },
-  supply: 0,
-  hp: 45,
-  barrier: 40,
-  speed: 4.05,
+  description: 'Your Shaper hero. Build a Generator, wall in, trade at the Market and climb to Generator Max. Fragile: hide from the Lancer!',
+  hp: 20,
+  barrier: 20,
+  speed: 3.94,
   radius: 0.4,
-  sight: 9,
-  weapon: { damage: 4, hits: 1, cooldown: 1.07, range: 0.1, windup: 0.12, hitInterval: 0, upgradePerLevel: 0 },
+  sight: 8,
+  turnRate: 18,
+  attributes: ['light', 'mechanical'],
   scale: 1.2,
-};
-UNITS.hunter = {
-  ...UNITS.lancer,
+});
+const LANCER_WEAPON = { damage: 5, hits: 1, cooldown: 1.0, range: 0.2, windup: 0.15, hitInterval: 0, upgradePerLevel: 0 };
+UNITS.lancerHero = survivalUnit({
+  id: 'lancerHero',
+  name: 'Lancer',
+  rig: 'lancer',
+  role: 'lancer',
+  description: 'The Lancer. Feeds on Shaper structures (minerals = damage dealt) and buys blades, armor and amulets at the Shop.',
+  hp: 500,
+  speed: 4.2,
+  radius: 0.9,
+  sight: 9,
+  turnRate: 14,
+  clearance: 2,
+  weapon: LANCER_WEAPON,
+  attributes: ['heavy', 'biological'],
+  priority: 25,
+  scale: 1.9,
+});
+UNITS.hunter = survivalUnit({
   id: 'hunter',
-  name: 'Lancer Hunter',
+  name: 'Hunter',
   rig: 'lancer',
   role: 'hunter',
-  survival: true,
-  description: 'Your Hunter hero. Track down every Shaper. Spend essence on blades, armor and more.',
-  cost: { crystals: 0, flux: 0 },
-  supply: 0,
-  hp: 220,
-  barrier: 100,
-  armor: 1,
-  speed: 3.7,
-  radius: 0.6,
-  sight: 11,
-  weapon: { damage: 12, hits: 2, cooldown: 0.857, range: 0.15, windup: 0.18, hitInterval: 0.14, upgradePerLevel: 0 },
-  lunge: { range: 4, cooldown: 9, speed: 9, maxDuration: 1.4, bonusDamage: 10 },
-  scale: 1.45,
-};
+  description: 'A fallen Shaper hunting for the Lancer. Same Shop, feed and abilities as the Lancer, minus Scan.',
+  hp: 250,
+  speed: 4.2,
+  radius: 0.9,
+  sight: 9,
+  turnRate: 14,
+  clearance: 2,
+  weapon: LANCER_WEAPON,
+  attributes: ['heavy', 'biological'],
+  priority: 24,
+  scale: 1.7,
+});
+UNITS.spirit = survivalUnit({
+  id: 'spirit',
+  name: 'Shaper Spirit',
+  rig: 'shaper',
+  role: 'spirit',
+  description: 'A fallen Shaper helping the living: Overcharge, Decay and auras that boost turrets and miners.',
+  hp: 60,
+  speed: 4.6,
+  radius: 0.4,
+  sight: 9,
+  turnRate: 18,
+  priority: 15,
+  scale: 1.1,
+});
+UNITS.miner = survivalUnit({
+  id: 'miner',
+  name: 'Miner',
+  rig: 'shaper',
+  role: 'miner',
+  description: 'Walks to the nearest mineral field and gathers minerals forever.',
+  hp: 40,
+  speed: 3.0,
+  radius: 0.35,
+  sight: 5,
+  priority: 12,
+  scale: 0.8,
+});
+UNITS.warden = survivalUnit({
+  id: 'warden',
+  name: 'Warden',
+  rig: 'lancer',
+  role: 'warden',
+  description: 'Ranged guardian trained at the Ancient Library. Shoots Lancers and Hunters.',
+  hp: 20000,
+  speed: 4.0,
+  radius: 0.5,
+  sight: 10,
+  weapon: { damage: 40960, hits: 1, cooldown: 1.0, range: 6, windup: 0.1, hitInterval: 0, upgradePerLevel: 0, ranged: true },
+  attributes: ['mechanical'],
+  priority: 21,
+  scale: 1.1,
+});
 
 // Footprints are in cells. Structures with `needsPower` must be inside a Conduit field.
 export const BUILDINGS = {
@@ -246,7 +314,7 @@ export const BUILDINGS = {
   },
 };
 
-// Survival-mode Builder structures (stats scale with the Builder's level, see data/survival.js)
+// Survival-mode structures (stats per level live in data/survival.js)
 const survivalStructure = (o) => ({
   supply: 0,
   sight: 6,
@@ -257,13 +325,20 @@ const survivalStructure = (o) => ({
   priority: 11,
   survival: true,
   size: 2,
-  armor: 1,
+  armor: 0,
+  barrier: 0,
+  cost: { crystals: 0, flux: 0 },
   ...o,
 });
-BUILDINGS.barricade = survivalStructure({ id: 'barricade', name: 'Barricade Ward', description: 'Crystal wall block with a small power field.', cost: { crystals: 15, flux: 0 }, buildTime: 3, hp: 300, barrier: 0, armor: 2, hotkey: 'W', priority: 9 });
-BUILDINGS.turret = survivalStructure({ id: 'turret', name: 'Spire Turret', description: 'Shoots crystal bolts at Hunters.', cost: { crystals: 90, flux: 0 }, buildTime: 8, hp: 180, barrier: 100, hotkey: 'T', sight: 8 });
-BUILDINGS.mender = survivalStructure({ id: 'mender', name: 'Mending Well', description: 'Restores barriers of nearby friendly structures.', cost: { crystals: 100, flux: 0 }, buildTime: 10, hp: 160, barrier: 160, hotkey: 'M', energy: { start: 100, max: 100 } });
-BUILDINGS.lanceTurret = survivalStructure({ id: 'lanceTurret', name: 'Lance Turret', description: 'Long-range heavy turret.', cost: { crystals: 175, flux: 0 }, buildTime: 12, hp: 240, barrier: 120, armor: 2, hotkey: 'L', sight: 10 });
+BUILDINGS.generator = survivalStructure({ id: 'generator', name: 'Generator', description: 'Produces gas. One per Shaper.', buildTime: 2, hp: 200, hotkey: 'G', priority: 12 });
+BUILDINGS.wall = survivalStructure({ id: 'wall', name: 'Wall', description: 'Wall block, upgraded in place.', buildTime: 2, hp: 50, hotkey: 'W', priority: 9, sight: 4 });
+BUILDINGS.turret = survivalStructure({ id: 'turret', name: 'Turret', description: 'Shoots visible Lancers and Hunters.', buildTime: 4, hp: 20, hotkey: 'T', sight: 8, priority: 13 });
+BUILDINGS.market = survivalStructure({ id: 'market', name: 'Market', description: 'Trades gas for minerals.', buildTime: 5, hp: 20, hotkey: 'M' });
+BUILDINGS.depot = survivalStructure({ id: 'depot', name: 'Collection Depot', description: 'Trains Miners.', buildTime: 10, hp: 200, size: 3, hotkey: 'D', trains: ['miner'] });
+BUILDINGS.autoMine = survivalStructure({ id: 'autoMine', name: 'Auto Mine', description: 'Produces gas forever.', buildTime: 5, hp: 100, hotkey: 'A' });
+BUILDINGS.library = survivalStructure({ id: 'library', name: 'Ancient Library', description: 'Enables Turret 11+, the Detector and Wardens.', buildTime: 20, hp: 300, size: 3, hotkey: 'L', trains: ['warden'] });
+BUILDINGS.detector = survivalStructure({ id: 'detector', name: 'Lancer Detector', description: 'Reveals enemies, even cloaked ones, within 20 cells.', buildTime: 10, hp: 200, hotkey: 'X', sight: 20 });
+BUILDINGS.shop = survivalStructure({ id: 'shop', name: 'Lancer Shop', description: 'Neutral, invulnerable. Lancers heal and shop here.', buildTime: 1, hp: 100000, size: 5, sight: 0, priority: 0, neutral: true });
 
 // Researches. Leveled upgrades have one entry per level.
 export const RESEARCH = {
