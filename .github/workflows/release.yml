@@ -71,12 +71,12 @@ jobs:
       - name: Collect with stable names
         run: |
           mkdir -p out
-          cp release/shardfall_*_amd64.deb out/shardfall_amd64.deb
-          cp release/Shardfall-*-x86_64.AppImage out/Shardfall-x86_64.AppImage
-          cp release/Shardfall-*-win-x64.zip out/Shardfall-win-x64.zip
-          cp release/shardfall-server-linux-x64 out/shardfall-server-linux-x64
-          cp release/shardfall-server-win-x64.exe out/shardfall-server-win-x64.exe
-          cp release/shardfall-web.zip out/shardfall-web.zip
+          cp release/pvzlite_*_amd64.deb out/pvzlite_amd64.deb
+          cp release/pvzlite-*-x86_64.AppImage out/pvzlite-x86_64.AppImage
+          cp release/pvzlite-*-win-x64.zip out/pvzlite-win-x64.zip
+          cp release/pvzlite-server-linux-x64 out/pvzlite-server-linux-x64
+          cp release/pvzlite-server-win-x64.exe out/pvzlite-server-win-x64.exe
+          cp release/pvzlite-web.zip out/pvzlite-web.zip
           ls -la out
       - uses: actions/upload-artifact@v4
         with:
@@ -104,8 +104,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p out
-          cp release/Shardfall-Setup-*.exe out/Shardfall-Setup.exe
-          cp release/Shardfall-Portable-*.exe out/Shardfall-Portable.exe
+          cp release/pvzlite-Setup-*.exe out/pvzlite-Setup.exe
+          cp release/pvzlite-Portable-*.exe out/pvzlite-Portable.exe
           ls -la out
       - uses: actions/upload-artifact@v4
         with:
@@ -125,7 +125,7 @@ jobs:
       - name: Checksums
         run: |
           cd assets
-          chmod +x shardfall-server-linux-x64 Shardfall-x86_64.AppImage
+          chmod +x pvzlite-server-linux-x64 pvzlite-x86_64.AppImage
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
       - name: Release notes
@@ -135,20 +135,20 @@ jobs:
 
           | Platform | Download |
           |---|---|
-          | Windows installer | **Shardfall-Setup.exe** |
-          | Windows portable | **Shardfall-Portable.exe** (no install) or **Shardfall-win-x64.zip** |
-          | Ubuntu / Debian | **shardfall_amd64.deb** |
-          | Any Linux | **Shardfall-x86_64.AppImage** |
-          | Dedicated server (Linux) | **shardfall-server-linux-x64** |
-          | Dedicated server (Windows) | **shardfall-server-win-x64.exe** |
-          | Static web hosting | **shardfall-web.zip** |
+          | Windows installer | **pvzlite-Setup.exe** |
+          | Windows portable | **pvzlite-Portable.exe** (no install) or **pvzlite-win-x64.zip** |
+          | Ubuntu / Debian | **pvzlite_amd64.deb** |
+          | Any Linux | **pvzlite-x86_64.AppImage** |
+          | Dedicated server (Linux) | **pvzlite-server-linux-x64** |
+          | Dedicated server (Windows) | **pvzlite-server-win-x64.exe** |
+          | Static web hosting | **pvzlite-web.zip** |
 
           See the README for installation steps.
           NOTES
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: Shardfall v1.0.${{ github.run_number }}
+          name: pvzlite v1.0.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           body_path: notes.md
           make_latest: 'true'

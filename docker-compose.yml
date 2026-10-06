@@ -1,5 +1,5 @@
 services:
-  shardfall:
+  pvzlite:
     build: .
     image: ghcr.io/kajmeter/pvzlite:latest
     ports:

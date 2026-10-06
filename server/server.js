@@ -1,4 +1,4 @@
-// Shardfall server: serves the web client over HTTP and hosts multiplayer games over WebSocket.
+// pvzlite server: serves the web client over HTTP and hosts multiplayer games over WebSocket.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -90,7 +90,7 @@ export function createServer({ port = 7777, host = '0.0.0.0', files = null, log 
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/health') {
       res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
-      res.end(JSON.stringify({ ok: true, name: 'shardfall', version: SERVER_VERSION, protocol: PROTOCOL_VERSION, clients: server.clients.size, rooms: server.rooms.size }));
+      res.end(JSON.stringify({ ok: true, name: 'pvzlite', version: SERVER_VERSION, protocol: PROTOCOL_VERSION, clients: server.clients.size, rooms: server.rooms.size }));
       return;
     }
     if (url.pathname === '/api/rooms') {
@@ -105,7 +105,7 @@ export function createServer({ port = 7777, host = '0.0.0.0', files = null, log 
     }
     if (!files) {
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
-      res.end('Shardfall multiplayer server is running. Connect with the game client using ws://<this-host>:<port>/ws');
+      res.end('pvzlite multiplayer server is running. Connect with the game client using ws://<this-host>:<port>/ws');
       return;
     }
     let p = decodeURIComponent(url.pathname);
@@ -123,7 +123,7 @@ export function createServer({ port = 7777, host = '0.0.0.0', files = null, log 
     const ext = path.extname(p).toLowerCase();
     if (p === '/index.html') {
       // tell the client it is served by a game server (enables same-origin multiplayer)
-      body = Buffer.from(body.toString('utf8').replace('<head>', '<head><script>window.__SHARDFALL_SERVER__=true</script>'));
+      body = Buffer.from(body.toString('utf8').replace('<head>', '<head><script>window.__PVZLITE_SERVER__=true</script>'));
     }
     res.writeHead(200, {
       'content-type': MIME[ext] || 'application/octet-stream',
@@ -203,7 +203,7 @@ function handle(server, client, msg) {
       break;
     case 'create': {
       if (room) room.removeClient(client);
-      const r = new Room(server, client, msg.name, msg.mapId);
+      const r = new Room(server, client, msg.name, msg.mapId, msg.mode);
       server.rooms.set(r.id, r);
       server.log(`room ${r.id} "${r.name}" created by ${client.name}`);
       r.broadcastState();

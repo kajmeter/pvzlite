@@ -1,4 +1,4 @@
-// Packs the built web client (dist/) into release/shardfall-web.zip for static web hosting.
+// Packs the built web client (dist/) into release/pvzlite-web.zip for static web hosting.
 import fs from 'node:fs';
 import path from 'node:path';
 import { zipDirectory } from './zip.mjs';
@@ -9,6 +9,6 @@ if (!fs.existsSync(path.join(dist, 'index.html'))) {
   process.exit(1);
 }
 fs.mkdirSync('release', { recursive: true });
-const out = path.resolve('release', 'shardfall-web.zip');
-const n = zipDirectory(dist, out, 'shardfall-web');
+const out = path.resolve('release', 'pvzlite-web.zip');
+const n = zipDirectory(dist, out, 'pvzlite-web');
 console.log(`wrote ${out} (${n} files, ${(fs.statSync(out).size / 1024).toFixed(0)} KB)`);

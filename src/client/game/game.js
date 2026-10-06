@@ -32,7 +32,16 @@ export class Game {
       for (const c of this.layer.children) c.style.pointerEvents = c.classList.contains('messages') || c.classList.contains('paused-tag') ? 'none' : '';
       if (session.localPlayer >= 0) {
         const p = session.player();
-        this.hud.message(`Welcome, ${p.name}. Harvest crystals, build Conduits and Portals, and destroy every enemy structure.`, 'info');
+        if (session.mode === 'survival') {
+          const msg =
+            p.role === 'hunter'
+              ? 'You are the Hunter. Buy upgrades while caged, then hunt down every Shaper! (R = reveal pulse)'
+              : 'You are a Shaper. Mine crystals, wall yourself in with Barricade Wards (W), build Turrets (T) and level up (U)!';
+          this.hud.message(msg, 'info');
+          setTimeout(() => this.controls?.selectHero(true), 50);
+        } else {
+          this.hud.message(`Welcome, ${p.name}. Harvest crystals, build Conduits and Portals, and destroy every enemy structure.`, 'info');
+        }
       }
     } else {
       this.renderer.rtsCamera.orbit = false;
@@ -133,6 +142,26 @@ export class Game {
   // Where the most interesting fight is happening (used by the menu camera and tooling)
   findAction() {
     const s = this.session;
+    if (s.mode === 'survival') {
+      // follow a Hunter that is breaking into a fortress, else any Hunter, else a fortress
+      let best = null;
+      let bestScore = 0;
+      for (const h of s.units()) {
+        if (h.type !== 'hunter' || h.caged) continue;
+        let near = 0;
+        for (const b of s.buildings()) if (Math.hypot(b.x - h.x, b.y - h.y) < 9) near += b.type === 'barricade' ? 1 : 3;
+        const score = 5 + near * 4;
+        if (score > bestScore) {
+          bestScore = score;
+          best = { x: h.x, y: h.y, score };
+        }
+      }
+      if (!best) {
+        const b = s.buildings().find((x) => x.type === 'turret') || s.buildings()[0];
+        if (b) best = { x: b.x, y: b.y, score: 1 };
+      }
+      return best;
+    }
     const lancers = s.units().filter((u) => u.type === 'lancer' && !u.hidden);
     let best = null;
     let bestScore = 0;
@@ -330,6 +359,84 @@ export class Game {
         case 'chat':
           this.hud?.message(`${ev.from}: ${ev.text}`, 'chat');
           break;
+        // ------------------------------------------------ survival mode
+        case 'release':
+          this.banner(s.player()?.role === 'hunter' ? 'THE HUNT BEGINS' : 'THE HUNTERS ARE FREE');
+          audio.play('alert');
+          this.renderer.rtsCamera.shake = 0.3;
+          break;
+        case 'bolt': {
+          const a = s.byId(ev.from);
+          const t = s.byId(ev.to);
+          if (!a || !t || (!this.visibleAt(a.x, a.y) && !this.visibleAt(t.x, t.y))) break;
+          const c = this.renderer.teamColor(a.owner);
+          const heavy = !!ev.heavy;
+          fx.bolt(a.x, hAt(a.x, a.y) + (heavy ? 2.0 : 1.55), a.y, t.x, hAt(t.x, t.y) + 1.2, t.y, c, heavy);
+          audio.play(heavy ? 'lunge' : 'hit-barrier', a.x, a.y);
+          break;
+        }
+        case 'mined':
+          if (s.mode === 'survival' && s.byId(ev.id)?.owner === me && ev.n) this.renderer.floatText(ev.x ?? s.byId(ev.id).x, ev.y ?? s.byId(ev.id).y, `+${ev.n}`, '#7fe0ff', 0.9, 12);
+          break;
+        case 'levelUp': {
+          const pl = s.players[ev.owner];
+          if (ev.x !== undefined) {
+            fx.flash(ev.x, hAt(ev.x, ev.y) + 1, ev.y, 5, 0xffe08a, 0.5);
+            fx.particles.emit(ev.x, hAt(ev.x, ev.y) + 0.6, ev.y, { count: 30, color: [1.8, 1.5, 0.5], speed: 3, up: 2, life: 0.8, size: 0.25 });
+            this.renderer.floatText(ev.x, ev.y, `LEVEL ${ev.level}!`, '#ffd36b', 1.6, 16);
+          }
+          if (ev.owner === me) {
+            this.hud?.message(`Level ${ev.level}!${ev.level >= 11 ? '' : ' Mining and defenses improved.'}`, 'info');
+            audio.play('research');
+          } else if (pl && ev.level >= 8 && !this.attract) this.hud?.message(`${pl.name} reached level ${ev.level}`, 'info');
+          break;
+        }
+        case 'upgraded':
+          if (ev.owner === me) audio.play('build-done');
+          break;
+        case 'reveal': {
+          const pl = s.players[ev.owner];
+          if (!pl) break;
+          if (s.player()?.role === 'builder') {
+            this.hud?.message('You have been revealed!', 'alert');
+            audio.play('alert');
+          } else if (ev.owner === me) {
+            for (const [x, y] of ev.spots || []) this.hud?.minimap.ping(x, y, '#ffb06a');
+            audio.play('overclock');
+          }
+          break;
+        }
+        case 'sprint': {
+          const u = s.byId(ev.id);
+          if (u) fx.particles.emit(u.x, hAt(u.x, u.y) + 0.5, u.y, { count: 14, color: [0.5, 1.6, 0.8], speed: 2, life: 0.5, size: 0.2 });
+          break;
+        }
+        case 'builderDown': {
+          const pl = s.players[ev.owner];
+          if (!pl || this.attract) break;
+          const killer = ev.by >= 0 ? s.players[ev.by] : null;
+          const text = ev.lives > 0 ? `${pl.name} was hunted down${killer ? ` by ${killer.name}` : ''} (${ev.lives} ${ev.lives === 1 ? 'life' : 'lives'} left)` : `${pl.name} is out of the game!`;
+          this.hud?.message(text, ev.owner === me ? 'alert' : 'info');
+          if (ev.owner === me) {
+            audio.play('defeat');
+            if (ev.lives > 0) this.banner('YOU WERE HUNTED');
+          }
+          break;
+        }
+        case 'hunterDown': {
+          const pl = s.players[ev.owner];
+          if (!pl || this.attract) break;
+          this.hud?.message(`Hunter ${pl.name} was destroyed! (respawning)`, ev.owner === me ? 'alert' : 'info');
+          if (ev.owner !== me) audio.play('victory');
+          break;
+        }
+        case 'respawn':
+          if (ev.owner === me) {
+            this.hud?.message('You are back!', 'info');
+            this.renderer.rtsCamera.jumpTo(ev.x, ev.y + 3);
+            setTimeout(() => this.controls?.selectHero(false), 30);
+          }
+          break;
         case 'gameOver':
           if (!this.attract) setTimeout(() => this.showEnd(), 1800);
           break;
@@ -337,6 +444,15 @@ export class Game {
           break;
       }
     }
+  }
+
+  banner(text) {
+    if (!this.hud) return;
+    const b = document.createElement('div');
+    b.className = 'big-banner';
+    b.textContent = text;
+    this.hud.root.append(b);
+    setTimeout(() => b.remove(), 3100);
   }
 
   showEnd() {
@@ -347,7 +463,15 @@ export class Game {
     const myTeam = me >= 0 ? s.players[me].team : -2;
     const victory = s.winnerTeam === myTeam;
     this.audio.play(victory ? 'victory' : 'defeat');
-    this.app.menus.showEndScreen(this, { victory, time: fmtTime(s.time), stats: s.stats() });
+    const info = s.survivalInfo ? s.survivalInfo() : null;
+    this.app.menus.showEndScreen(this, {
+      victory,
+      time: fmtTime(s.time),
+      stats: s.stats(),
+      survival: s.mode === 'survival',
+      winnerName: s.mode === 'survival' ? (s.winnerTeam === 1 ? 'THE SHAPERS SURVIVE' : 'THE HUNTERS WIN') : '',
+      reason: (info && info.reason) || s.overReason || '',
+    });
   }
 
   dispose() {

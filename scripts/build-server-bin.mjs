@@ -1,6 +1,6 @@
 // Builds standalone single-file server binaries (web client embedded) using Node.js SEA:
-//   release/shardfall-server-linux-x64
-//   release/shardfall-server-win-x64.exe
+//   release/pvzlite-server-linux-x64
+//   release/pvzlite-server-win-x64.exe
 // Usage: node scripts/build-server-bin.mjs [linux-x64] [win-x64]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -112,8 +112,8 @@ const postject = path.join(ROOT, 'node_modules', 'postject', 'dist', 'cli.js');
 
 for (const target of targets) {
   const isWin = target.startsWith('win');
-  const binOut = path.join(OUT, `shardfall-server-${target}${isWin ? '.exe' : ''}`);
-  const cacheDir = path.join(os.homedir(), '.cache', 'shardfall-node');
+  const binOut = path.join(OUT, `pvzlite-server-${target}${isWin ? '.exe' : ''}`);
+  const cacheDir = path.join(os.homedir(), '.cache', 'pvzlite-node');
   fs.mkdirSync(cacheDir, { recursive: true });
   const archive = isWin ? `node-${version}-win-x64.zip` : `node-${version}-${target}.tar.gz`;
   const archivePath = path.join(cacheDir, archive);

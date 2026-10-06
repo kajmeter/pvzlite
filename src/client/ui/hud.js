@@ -1,6 +1,7 @@
 // In-game HUD: resources, clock, minimap, selection panel, command card, messages.
 import { ICONS, icon } from './icons.js';
 import { UNITS, BUILDINGS, RESEARCH } from '../../shared/data/defs.js';
+import { SURVIVAL, levelCost, HUNTER_UPGRADES, HUNTER_UPGRADE_ORDER } from '../../shared/data/survival.js';
 import { TICK_RATE } from '../../shared/constants.js';
 import { Minimap } from './minimap.js';
 
@@ -19,6 +20,7 @@ function fmtTime(sec) {
 
 function nameOf(e) {
   if (e.kind === 'unit') return UNITS[e.type].name;
+  if (e.kind === 'building' && BUILDINGS[e.type]?.survival) return BUILDINGS[e.type].name;
   if (e.kind === 'building') return e.type === 'portal' && e.phase ? 'Phase Portal' : BUILDINGS[e.type].name;
   if (e.type === 'crystal') return e.rich ? 'Rich Crystal Field' : 'Crystal Field';
   if (e.type === 'vent') return 'Flux Vent';
@@ -31,6 +33,7 @@ export class Hud {
   constructor(root, game) {
     this.root = root;
     this.game = game;
+    this.survival = game.session.mode === 'survival';
     this.lastSig = null;
     this.lastCardSig = '';
     this.timer = 0;
@@ -56,6 +59,31 @@ export class Hud {
     this.supplyEl.title = 'Supply (build Conduits for more)';
     res.append(this.crystalsEl, this.fluxEl, this.supplyEl);
     top.append(menu, res);
+    if (this.survival) {
+      const me = this.game.session.player();
+      res.innerHTML = '';
+      if (me && me.role === 'hunter') {
+        this.essenceEl = el('div', 'res essence', `${ICONS.essence}<span>0</span>`);
+        this.essenceEl.title = 'Essence — earned over time and by hunting. Spend it on upgrades.';
+        this.killsEl = el('div', 'res', `${ICONS.hunter}<span>0</span>`);
+        this.killsEl.title = 'Shapers hunted';
+        res.append(this.essenceEl, this.killsEl);
+      } else {
+        this.crystalsEl = el('div', 'res', `${ICONS.crystals}<span>0</span>`);
+        this.crystalsEl.title = 'Crystals';
+        this.levelEl = el('div', 'res level', `${ICONS.level}<span>Lv 1</span>`);
+        this.levelEl.title = `Your level. Reach ${SURVIVAL.maxLevel} to win!`;
+        this.livesEl = el('div', 'res lives', `${ICONS.lives}<span>2</span>`);
+        this.livesEl.title = 'Lives left';
+        res.append(this.crystalsEl, this.levelEl, this.livesEl);
+      }
+      this.phaseEl = el('div', 'phase-banner');
+      top.append(this.phaseEl);
+      this.teamEl = el('div', 'team-panel panel');
+      top.append(this.teamEl);
+      this.scoreEl = el('div', 'scoreboard panel');
+      this.scoreEl.style.display = 'none';
+    }
     this.fpsEl = el('div', 'fps');
     this.netEl = el('div', 'net-tag');
     top.append(this.fpsEl, this.netEl);
@@ -103,6 +131,7 @@ export class Hud {
     r.append(this.pausedTag);
     this.modal = el('div');
     r.append(this.modal);
+    if (this.scoreEl) r.append(this.scoreEl);
     this.bindMinimap(mm);
     this.chatInput.addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -165,7 +194,9 @@ export class Hud {
     const p = s.player();
     this.minimap.update(dt);
     this.clock.textContent = fmtTime(s.time);
-    if (p) {
+    if (this.survival) {
+      this.updateSurvivalTop(dt);
+    } else if (p) {
       this.crystalsEl.lastChild.textContent = Math.floor(p.crystals);
       this.fluxEl.lastChild.textContent = Math.floor(p.flux);
       this.supplyEl.lastChild.textContent = `${p.supplyUsed}/${p.supplyCap}`;
@@ -182,6 +213,63 @@ export class Hud {
     this.updateGroups();
     this.updateSelection();
     this.updateCard();
+  }
+
+  updateSurvivalTop(dt) {
+    const s = this.game.session;
+    const p = s.player();
+    const info = s.survivalInfo ? s.survivalInfo() : null;
+    if (p) {
+      if (p.role === 'hunter') {
+        this.essenceEl.lastChild.textContent = Math.floor(p.essence || 0);
+        this.killsEl.lastChild.textContent = (p.stats && p.stats.builderKills) || 0;
+      } else {
+        this.crystalsEl.lastChild.textContent = Math.floor(p.crystals || 0);
+        const lvl = p.level || 1;
+        this.levelEl.lastChild.textContent = lvl >= SURVIVAL.maxLevel ? `Lv ${lvl} ★` : `Lv ${lvl} · next ${levelCost(lvl)}`;
+        const lives = Math.max(0, p.lives ?? 0);
+        this.livesEl.lastChild.textContent = p.eliminated ? 'out' : String(lives);
+      }
+    }
+    if (info) {
+      let txt;
+      if (info.phase === 'grace') txt = `<b>${p && p.role === 'hunter' ? 'Hunt begins in' : 'Hunters released in'}</b> ${fmtTime(info.releaseIn)}`;
+      else txt = `<b>Survive</b> ${fmtTime(info.timeLeft)}`;
+      if (p && p.respawnAt >= 0 && !p.eliminated && !p.heroId) txt += ` · <span style="color:#ff7676">respawning…</span>`;
+      if (this.phaseHtml !== txt) {
+        this.phaseHtml = txt;
+        this.phaseEl.innerHTML = txt;
+      }
+      this.phaseEl.classList.toggle('grace', info.phase === 'grace');
+    }
+    this.teamTimer = (this.teamTimer || 0) - dt;
+    if (this.teamTimer <= 0) {
+      this.teamTimer = 0.4;
+      this.renderTeams(this.teamEl, false);
+      if (this.scoreEl.style.display !== 'none') this.renderTeams(this.scoreEl, true);
+    }
+  }
+
+  renderTeams(target, full) {
+    const s = this.game.session;
+    const rows = s.players.map((pl) => {
+      const color = `#${(pl.colorHex ?? 0xffffff).toString(16).padStart(6, '0')}`;
+      const up = pl.hunterUp ? Object.values(pl.hunterUp).reduce((a, b) => a + b, 0) : 0;
+      const status = pl.eliminated ? '<span class="dead">out</span>' : pl.heroId ? '' : '<span class="dead">down</span>';
+      const stat = pl.role === 'hunter' ? `★${up}` : `Lv ${pl.level || 1} · ${'♥'.repeat(Math.max(0, pl.lives ?? 0))}`;
+      if (!full) return `<div class="trow"><i style="background:${color}"></i>${icon(pl.role === 'hunter' ? 'hunter' : 'builder').replace('<svg', '<svg width="16" height="16"')}<span class="tname">${pl.name}</span><span class="tstat">${stat}</span>${status}</div>`;
+      const ups = pl.role === 'hunter' ? HUNTER_UPGRADE_ORDER.map((id) => `${HUNTER_UPGRADES[id].name.split(' ').pop()} ${pl.hunterUp?.[id] || 0}`).join(' · ') : '';
+      return `<tr><td><i style="background:${color}"></i> ${pl.name}</td><td>${pl.role === 'hunter' ? 'Hunter' : 'Shaper'}</td><td>${stat}</td><td>${pl.role === 'hunter' ? (pl.stats?.builderKills ?? 0) : (pl.stats?.hunterKills ?? 0)}</td><td>${pl.deaths ?? 0}</td><td class="muted">${ups}</td><td>${status}</td></tr>`;
+    });
+    target.innerHTML = full
+      ? `<div class="sb-title">Scoreboard <span class="muted">(hold Tab)</span></div><table><tr><th>Player</th><th>Role</th><th>Level</th><th>Kills</th><th>Deaths</th><th>Upgrades</th><th></th></tr>${rows.join('')}</table>`
+      : rows.join('');
+  }
+
+  showScoreboard(on) {
+    if (!this.scoreEl) return;
+    this.scoreEl.style.display = on ? 'block' : 'none';
+    if (on) this.renderTeams(this.scoreEl, true);
   }
 
   updateGroups() {
@@ -274,7 +362,13 @@ export class Hud {
     let stats = '';
     const p = e.owner >= 0 ? s.players[e.owner] : null;
     const up = p && p.upgrades ? p.upgrades : { weapons: 0, armor: 0, barrier: 0 };
-    if (e.kind === 'unit') {
+    if (e.kind === 'unit' && (e.type === 'builder' || e.type === 'hunter')) {
+      if (e.type === 'builder') {
+        stats += `<span>Level <b>${p?.level ?? 1}</b></span><span>Mining <b>${e.mineYield ?? 6 + 2 * (p?.level ?? 1)}</b>/trip</span><span>Armor <b>${e.armor ?? 0}</b></span><span>Lives <b>${p?.lives ?? '?'}</b></span>`;
+      } else {
+        stats += `<span>Damage <b>${Math.round(e.damage ?? 12)} ×2</b></span><span>Armor <b>${e.armor ?? 1}</b></span><span>Speed <b>${(e.speedOverride ?? 3.7).toFixed(2)}</b></span><span>vs walls <b>×${(e.structureBonus ?? 1).toFixed(1)}</b></span>`;
+      }
+    } else if (e.kind === 'unit') {
       const d = UNITS[e.type];
       const dmg = d.weapon.damage + (up.weapons || 0) * d.weapon.upgradePerLevel;
       stats += `<span>Damage <b>${dmg}${d.weapon.hits > 1 ? ` ×${d.weapon.hits}` : ''}</b></span>`;
@@ -290,6 +384,8 @@ export class Hud {
       if (e.overclock > 0) stats += `<span style="color:#ffd04a">Overclocked ${Math.ceil(e.overclock)}s</span>`;
       if (e.type === 'portal' && e.phase && e.owner === s.localPlayer) stats += `<span>Warp ${e.warpCd > 0 ? `<b>${Math.ceil(e.warpCd)}s</b>` : '<b>ready</b>'}</span>`;
       if (e.type === 'portal' && !e.phase && e.transform > 0) stats += `<span>Transforming <b>${Math.floor((e.transform / 7) * 100)}%</b></span>`;
+      if (e.weaponDamage) stats += `<span>Damage <b>${Math.round(e.weaponDamage)}</b></span><span>Range <b>${e.weaponRange}</b></span>`;
+      if (e.level) stats += `<span>Built at <b>Lv ${e.level}</b></span>`;
       if (e.type === 'siphon' && e.vent) stats += `<span>Flux left <b>${Math.floor(e.vent.amount ?? e.ventAmount ?? 0)}</b></span>`;
       if (e.type === 'siphon' && e.ventAmount !== undefined && !e.vent) stats += `<span>Flux left <b>${Math.floor(e.ventAmount)}</b></span>`;
     } else if (e.type === 'beacon') {
@@ -317,7 +413,7 @@ export class Hud {
   updateCard() {
     const g = this.game;
     const buttons = g.controls.currentButtons();
-    const sig = buttons.map((b) => `${b.id}|${b.disabled ? 1 : 0}|${b.dim ? 1 : 0}|${b.active ? 1 : 0}|${b.cooldown ?? ''}|${b.autocast ?? ''}`).join(',');
+    const sig = buttons.map((b) => `${b.id}|${b.disabled ? 1 : 0}|${b.dim ? 1 : 0}|${b.active ? 1 : 0}|${b.cooldown ?? ''}|${b.autocast ?? ''}|${b.badge ?? ''}|${b.tooltip?.title ?? ''}`).join(',');
     if (sig === this.lastCardSig) return;
     this.lastCardSig = sig;
     const card = this.card;
@@ -332,7 +428,7 @@ export class Hud {
       cell.style.gridColumn = String((i % 5) + 1);
       cell.style.gridRow = String(Math.floor(i / 5) + 1);
       if (b) {
-        cell.innerHTML = `${icon(b.icon)}<span class="hk">${b.label || b.hotkey}</span>${b.cooldown ? `<div class="cd">${b.cooldown}</div>` : ''}${b.autocast ? '<div class="auto"></div>' : ''}`;
+        cell.innerHTML = `${icon(b.icon)}<span class="hk">${b.label || b.hotkey}</span>${b.badge !== undefined ? `<span class="badge">${b.badge}</span>` : ''}${b.cooldown ? `<div class="cd">${b.cooldown}</div>` : ''}${b.autocast ? '<div class="auto"></div>' : ''}`;
         cell.dataset.cmd = b.id;
         cell.onmousedown = (e) => {
           e.preventDefault();
@@ -357,6 +453,7 @@ export class Hud {
       if (t.cost.supply) parts.push(`<span>▲ ${t.cost.supply}</span>`);
       if (t.cost.supplyGive) parts.push(`<span>+${t.cost.supplyGive} supply</span>`);
       if (t.cost.energy) parts.push(`<span style="color:#d79bff">⚡ ${t.cost.energy}</span>`);
+      if (t.cost.essence) parts.push(`<span style="color:#ff9a6a">✦ ${t.cost.essence} essence</span>`);
       if (t.cost.time) parts.push(`<span>⏱ ${t.cost.time}s</span>`);
       cost = `<div class="tt-cost">${parts.join('')}</div>`;
     }

@@ -65,10 +65,9 @@ export function setupSurvival(world, opts) {
   }
   world.teamIds = [BUILDER_TEAM, HUNTER_TEAM];
   for (const t of world.teamIds) {
-    if (!world.vision[t]) {
-      world.vision[t] = new Uint8Array(map.width * map.height);
-      world.explored[t] = new Uint8Array(map.width * map.height);
-    }
+    if (!world.vision[t]) world.vision[t] = new Uint8Array(map.width * map.height);
+    // the terrain is known to everyone in survival; only units/structures hide in the fog
+    world.explored[t] = new Uint8Array(map.width * map.height).fill(1);
   }
 }
 

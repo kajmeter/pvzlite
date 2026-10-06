@@ -19,9 +19,9 @@ export function parseArgs(argv) {
   return out;
 }
 
-export const HELP = `Shardfall server ${SERVER_VERSION}
+export const HELP = `pvzlite server ${SERVER_VERSION}
 
-Usage: shardfall-server [options]
+Usage: pvzlite-server [options]
   --port <n>       Port to listen on (default 7777, or $PORT)
   --host <addr>    Interface to bind (default 0.0.0.0, or $HOST)
   --static <dir>   Folder with the built web client (default: ./dist)
@@ -47,7 +47,7 @@ export async function main(argv = process.argv.slice(2), { files: embedded, stat
   const host = args.host || process.env.HOST || '0.0.0.0';
   let files = null;
   if (!args.noWeb) {
-    const candidates = [args.static, process.env.SHARDFALL_STATIC, ...staticDirs, path.join(process.cwd(), 'dist')].filter(Boolean);
+    const candidates = [args.static, process.env.PVZLITE_STATIC, ...staticDirs, path.join(process.cwd(), 'dist')].filter(Boolean);
     const dir = candidates.find((d) => fs.existsSync(path.join(d, 'index.html')));
     if (dir) files = dirProvider(dir);
     else if (embedded) files = embedded;
@@ -55,7 +55,7 @@ export async function main(argv = process.argv.slice(2), { files: embedded, stat
   }
   const server = await createServer({ port, host, files });
   const addrs = lanAddresses();
-  console.log(`\n  Shardfall server ${SERVER_VERSION} running on port ${server.port}`);
+  console.log(`\n  pvzlite server ${SERVER_VERSION} running on port ${server.port}`);
   if (files) {
     console.log(`  Play in your browser:   http://localhost:${server.port}`);
     for (const a of addrs) console.log(`                          http://${a}:${server.port}`);

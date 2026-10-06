@@ -88,7 +88,7 @@ export const SURVIVAL_BUILDINGS = {
     armor: () => 1,
     needsPower: true,
     unlock: 3,
-    hotkey: 'M',
+    hotkey: 'R',
     range: 5.5,
     rate: 22,
     bounty: 'mender',
@@ -115,13 +115,13 @@ export const SURVIVAL_BUILD_MENU = ['barricade', 'turret', 'mender', 'lanceTurre
 
 // Hunter upgrade shop (essence). cost(level) = base + step * level
 export const HUNTER_UPGRADES = {
-  blades: { id: 'blades', name: 'Sharpened Blades', description: '+3 damage per glaive strike.', max: 10, base: 90, step: 45, hotkey: 'E' },
-  armor: { id: 'armor', name: 'Heavy Armor', description: '+1 armor.', max: 10, base: 90, step: 45, hotkey: 'A' },
-  vitality: { id: 'vitality', name: 'Vitality', description: '+60 hull.', max: 10, base: 80, step: 40, hotkey: 'V' },
-  barrier: { id: 'barrier', name: 'Barrier Core', description: '+40 barrier and faster recharge.', max: 8, base: 100, step: 50, hotkey: 'B' },
-  swiftness: { id: 'swiftness', name: 'Swiftness', description: '+0.15 movement speed.', max: 6, base: 120, step: 60, hotkey: 'S' },
-  sunder: { id: 'sunder', name: 'Sunder', description: '+30% damage against structures.', max: 6, base: 100, step: 60, hotkey: 'D' },
-  lunge: { id: 'lunge', name: 'Lunge Mastery', description: 'Lunge recharges 1 s faster and reaches 1 cell further.', max: 5, base: 150, step: 75, hotkey: 'F' },
+  blades: { id: 'blades', name: 'Sharpened Blades', description: '+3 damage per glaive strike.', max: 10, base: 90, step: 45, hotkey: 'Q' },
+  armor: { id: 'armor', name: 'Heavy Armor', description: '+1 armor.', max: 10, base: 90, step: 45, hotkey: 'W' },
+  vitality: { id: 'vitality', name: 'Vitality', description: '+60 hull.', max: 10, base: 80, step: 40, hotkey: 'E' },
+  barrier: { id: 'barrier', name: 'Barrier Core', description: '+40 barrier and faster recharge.', max: 8, base: 100, step: 50, hotkey: 'Z' },
+  swiftness: { id: 'swiftness', name: 'Swiftness', description: '+0.15 movement speed.', max: 6, base: 120, step: 60, hotkey: 'X' },
+  sunder: { id: 'sunder', name: 'Sunder', description: '+30% damage against structures.', max: 6, base: 100, step: 60, hotkey: 'C' },
+  lunge: { id: 'lunge', name: 'Lunge Mastery', description: 'Lunge recharges 1 s faster and reaches 1 cell further.', max: 5, base: 150, step: 75, hotkey: 'V' },
 };
 
 export const HUNTER_UPGRADE_ORDER = ['blades', 'armor', 'vitality', 'barrier', 'swiftness', 'sunder', 'lunge'];

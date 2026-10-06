@@ -1,6 +1,8 @@
 // Mouse & keyboard RTS controls: selection, smart commands, hotkeys, control groups, placement.
 import { BUILDINGS } from '../../shared/data/defs.js';
-import { commandCard } from '../game/commands.js';
+import { commandCard, survivalCard } from '../game/commands.js';
+
+const isWorker = (u) => u.type === 'shaper' || u.type === 'builder';
 
 const EDGE = 8;
 
@@ -84,6 +86,7 @@ export class Controls {
   currentButtons() {
     if (this.session.localPlayer < 0) return [];
     const sel = this.selectionEntities();
+    if (this.session.mode === 'survival') return survivalCard({ session: this.session, selection: sel, mode: this.mode });
     if (this.submenu === 'build' && !sel.some((e) => this.own(e) && e.type === 'shaper')) this.submenu = null;
     return commandCard({ session: this.session, selection: sel, submenu: this.submenu, mode: this.mode });
   }
@@ -102,6 +105,7 @@ export class Controls {
 
   idleWorkers() {
     const me = this.session.localPlayer;
+    if (this.session.mode === 'survival') return [];
     return this.session
       .units()
       .filter((u) => u.owner === me && u.type === 'shaper' && !u.dead && !u.hidden && !(u.warping > 0) && (u.orders ? u.orders.length === 0 : !!u.idle));
@@ -109,6 +113,7 @@ export class Controls {
 
   armyUnits() {
     const me = this.session.localPlayer;
+    if (this.session.mode === 'survival') return this.session.units().filter((u) => u.owner === me && (u.type === 'builder' || u.type === 'hunter'));
     return this.session.units().filter((u) => u.owner === me && u.type !== 'shaper' && !(u.warping > 0));
   }
 
@@ -357,8 +362,8 @@ export class Controls {
       if (trainers.length) this.issue({ type: 'rally', ids: trainers.map((b) => b.id), x: g.x, y: g.y }, false);
     }
     const ids = units.map((u) => u.id);
-    const workers = units.filter((u) => u.type === 'shaper');
-    const others = units.filter((u) => u.type !== 'shaper');
+    const workers = units.filter(isWorker);
+    const others = units.filter((u) => !isWorker(u));
     if (target) {
       const enemy = target.owner >= 0 && target.owner !== me && !s.isAllied(target.owner);
       if (enemy || (target.type === 'rubble' && target.hp > 0)) {
@@ -426,7 +431,7 @@ export class Controls {
         break;
       case 'gather': {
         if (target && (target.type === 'crystal' || target.type === 'siphon' || target.type === 'vent')) {
-          this.issue({ type: 'gather', ids: units.filter((u) => u.type === 'shaper').map((u) => u.id), target: target.id, queue: shift });
+          this.issue({ type: 'gather', ids: units.filter(isWorker).map((u) => u.id), target: target.id, queue: shift });
           fx.marker(target.x, h, target.y, 0xffd04a);
         } else {
           this.game.hud.message('Must target a crystal field or a Siphon', 'error');
@@ -463,7 +468,7 @@ export class Controls {
       case 'build': {
         const p = this.renderer.placement;
         if (!p) return;
-        const workers = units.filter((u) => u.type === 'shaper');
+        const workers = units.filter(isWorker);
         if (!workers.length) break;
         const cx = p.bx + BUILDINGS[p.type].size / 2;
         const cy = p.by + BUILDINGS[p.type].size / 2;
@@ -603,9 +608,15 @@ export class Controls {
       hud.openChat();
       return;
     }
-    if (key === 'F1') {
+    if (key === 'F1' || (key === 'F2' && this.session.mode === 'survival')) {
       e.preventDefault();
-      this.selectIdleWorker(e.ctrlKey);
+      if (this.session.mode === 'survival') this.selectHero(true);
+      else this.selectIdleWorker(e.ctrlKey);
+      return;
+    }
+    if (key === 'Tab') {
+      e.preventDefault();
+      this.game.hud.showScoreboard?.(true);
       return;
     }
     if (key === 'F2') {
@@ -657,7 +668,16 @@ export class Controls {
     return this.currentButtons().some((b) => b.hotkey === 'Escape');
   }
 
+  selectHero(center) {
+    const me = this.session.localPlayer;
+    const h = this.session.units().find((u) => u.owner === me && (u.type === 'builder' || u.type === 'hunter'));
+    if (!h) return;
+    this.setSelection([h], false);
+    if (center) this.renderer.rtsCamera.jumpTo(h.x, h.y + 3);
+  }
+
   onKeyUp(e) {
+    if (e.key === 'Tab') this.game.hud.showScoreboard?.(false);
     const cam = this.renderer.rtsCamera;
     if (e.key === 'ArrowLeft') cam.keys.left = false;
     else if (e.key === 'ArrowRight') cam.keys.right = false;

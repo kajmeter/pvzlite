@@ -1,4 +1,4 @@
-// Original Shardfall maps. Each description is expanded symmetrically by mapgen.
+// Original pvzlite maps. Each description is expanded symmetrically by mapgen.
 import { generateMap } from './mapgen.js';
 
 const D = (deg) => (deg * Math.PI) / 180;

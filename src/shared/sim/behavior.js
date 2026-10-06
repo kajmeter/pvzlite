@@ -593,7 +593,7 @@ export function orderGather(world, u, o) {
         const amt = Math.min(u.mineYield || 4, res.amount);
         res.amount -= amt;
         world.survivalMine(u, amt);
-        world.emit({ e: 'mined', id: u.id, k: 'crystals', n: amt, x: u.x, y: u.y });
+        world.emit({ e: 'mined', id: u.id, owner: u.owner, k: 'crystals', n: amt, x: u.x, y: u.y });
         if (res.amount <= 0) {
           res.miner = 0;
           u.mining = 0;

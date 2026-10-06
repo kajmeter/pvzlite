@@ -11,7 +11,7 @@ import { buildTerrain } from './terrain.js';
 import { UnitRenderer } from './units.js';
 import { Effects } from './effects.js';
 import { fogUniforms, hologram, crystalMat, glow, applyFog } from './materials.js';
-import { buildStructureModel, crystalClusterGeometry, buildVentModel, buildBeaconModel, buildRubbleModel } from './models.js';
+import { buildStructureModel, crystalClusterGeometry, buildVentModel, buildBeaconModel, buildRubbleModel, buildCageModel } from './models.js';
 import { RTSCamera } from '../input/camera.js';
 
 const QUALITY = {
@@ -178,6 +178,14 @@ export class GameRenderer {
     );
     this.rangeRing.visible = false;
     scene.add(this.rangeRing);
+    // survival: hunter cage
+    this.cage = null;
+    if (session.mode === 'survival') {
+      this.cage = buildCageModel(map.cageRadius - 0.5);
+      this.cage.group.position.set(map.cage.x, heightAt(map, map.cage.x, map.cage.y), map.cage.y);
+      scene.add(this.cage.group);
+    }
+    this.floats = [];
 
     // composer
     this.composer = new EffectComposer(this.renderer);
@@ -264,9 +272,10 @@ export class GameRenderer {
     const H = this.map.height;
     const d = this.powerData;
     d.fill(0);
+    const survival = s.mode === 'survival';
     for (const b of s.buildings()) {
-      if (b.type !== 'conduit' || b.owner !== s.localPlayer || !b.built) continue;
-      const R = POWER_RADIUS;
+      if (b.type !== (survival ? 'barricade' : 'conduit') || b.owner !== s.localPlayer || !b.built) continue;
+      const R = survival ? 4.5 : POWER_RADIUS;
       for (let y = Math.max(0, Math.floor(b.y - R - 1)); y <= Math.min(H - 1, Math.ceil(b.y + R + 1)); y++) {
         for (let x = Math.max(0, Math.floor(b.x - R - 1)); x <= Math.min(W - 1, Math.ceil(b.x + R + 1)); x++) {
           const dd = Math.hypot(x + 0.5 - b.x, y + 0.5 - b.y);
@@ -367,7 +376,7 @@ export class GameRenderer {
     };
     for (const u of s.units()) {
       if (u.hidden || !s.isVisible(u)) continue;
-      consider(u, u.type === 'lancer' ? 0.8 : 0.6);
+      consider(u, u.type === 'hunter' ? 1.2 : u.type === 'lancer' ? 0.8 : 0.6);
     }
     for (const b of s.buildings()) {
       if (!s.isVisible(b) && b.owner !== s.localPlayer) continue;
@@ -442,7 +451,8 @@ export class GameRenderer {
       this.fogTimer = 0.1;
       this.updateFog();
     }
-    const wantPower = !!(this.placement && BUILDINGS[this.placement.type]?.needsPower) || this.warpPreview || this.showPowerFor;
+    const survivalPower = s.mode === 'survival' && this.placement && ['turret', 'lanceTurret', 'mender'].includes(this.placement.type);
+    const wantPower = survivalPower || !!(this.placement && BUILDINGS[this.placement.type]?.needsPower) || this.warpPreview || this.showPowerFor;
     fogUniforms.powerShow.value = wantPower ? 1 : 0;
     if (wantPower) {
       this.powerTimer -= dt;
@@ -475,6 +485,14 @@ export class GameRenderer {
     this.effects.endBeams();
     this.effects.update(dt);
     if (this.terrain.group.userData.lava) this.terrain.group.userData.lava.uniforms.uTime.value = this.time;
+    if (this.cage) {
+      const sv = s.survivalInfo ? s.survivalInfo() : null;
+      const caged = sv && sv.phase === 'grace';
+      const k = this.cage.wall.material;
+      k.opacity += ((caged ? 0.22 + Math.sin(this.time * 4) * 0.05 : 0) - k.opacity) * Math.min(1, dt * 4);
+      this.cage.wall.visible = k.opacity > 0.01;
+      for (const p of this.cage.pillars) p.visible = caged || k.opacity > 0.05;
+    }
 
     if (this.quality.bloom) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
@@ -561,6 +579,7 @@ export class GameRenderer {
       if (m.anim.ring) m.anim.ring.rotation.z = b.phase ? t * 0.5 : 0;
     }
     for (const gl of m.anim.glows) gl.scale.setScalar(powered ? 0.9 + Math.sin(t * 4 + b.id) * 0.12 : 0.5);
+    if (m.anim.head) m.anim.head.rotation.y = -(b.aim ?? (b.id % 6));
     // damage fire
     if (b.built && b.hp < b.maxHp * 0.5 && !b.ghost && Math.random() < 0.25) {
       this.effects.particles.emit(b.x + (Math.random() - 0.5) * b.w * 0.6, h + 1.2, b.y + (Math.random() - 0.5) * b.h * 0.6, { count: 1, color: [1.4, 0.55, 0.15], speed: 0.4, up: 2, life: 0.9, size: 0.5, sizeEnd: 0.1 });
@@ -787,7 +806,7 @@ export class GameRenderer {
     for (let y = p.by; y < p.by + size; y++) {
       for (let x = p.bx; x < p.bx + size; x++) {
         const ok = p.cellOk ? p.cellOk(x, y) : p.ok;
-        c.setRGB(ok ? 0.2 : 1.4, ok ? 1.3 : 0.2, ok ? 0.4 : 0.2);
+        c.setRGB(ok ? 0.15 : 1.2, ok ? 1.0 : 0.15, ok ? 0.3 : 0.15);
         dummy.position.set(x + 0.5, this.hAt(x + 0.5, y + 0.5) + 0.07, y + 0.5);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.set(1, 1, 1);
@@ -800,6 +819,11 @@ export class GameRenderer {
     cells.count = n;
     cells.instanceMatrix.needsUpdate = true;
     if (cells.instanceColor) cells.instanceColor.needsUpdate = true;
+  }
+
+  floatText(x, y, text, color = '#9fe8ff', life = 1.1, size = 13) {
+    this.floats.push({ x, y, text, color, life, size, t0: this.time });
+    if (this.floats.length > 80) this.floats.shift();
   }
 
   // ------------------------------------------------------------------ 2D overlay
@@ -819,7 +843,7 @@ export class GameRenderer {
       const y = e.kind === 'unit' ? e.py + (e.y - e.py) * s.alpha() : e.y;
       const p = this.project(x, y, this.hAt(x, y) + hTop);
       if (p.z > 1 || p.x < -50 || p.y < -50 || p.x > this.width + 50 || p.y > this.height + 50) return;
-      const w = e.kind === 'unit' ? (e.type === 'lancer' ? 34 : 26) : Math.max(40, e.w * 16);
+      const w = e.kind === 'unit' ? (e.type === 'hunter' ? 52 : e.type === 'builder' ? 36 : e.type === 'lancer' ? 34 : 26) : Math.max(36, e.w * 16);
       const bx = Math.round(p.x - w / 2);
       let by = Math.round(p.y - 10);
       if (e.maxBarrier) {
@@ -850,15 +874,51 @@ export class GameRenderer {
     };
     for (const u of this.visibleUnits || []) {
       if (u.hidden) continue;
-      draw(u, u.type === 'lancer' ? 1.95 : 1.25);
+      draw(u, u.type === 'hunter' ? 2.75 : u.type === 'lancer' ? 1.95 : u.type === 'builder' ? 1.35 : 1.25);
     }
     for (const b of s.buildings()) {
       if (b.owner !== s.localPlayer && !s.isVisible(b)) continue;
-      draw(b, b.type === 'citadel' ? 5 : b.type === 'conduit' ? 2.6 : 3);
+      draw(b, b.type === 'citadel' ? 5 : b.type === 'conduit' ? 2.6 : b.type === 'barricade' ? 2.2 : 3);
     }
     for (const n of s.neutrals()) {
       if (n.type === 'rubble' && s.isVisible(n)) draw(n, 1.5);
     }
+    // hero labels (survival): level / upgrade badges
+    if (s.mode === 'survival') {
+      ctx.font = 'bold 12px Segoe UI, sans-serif';
+      ctx.textAlign = 'center';
+      for (const u of this.visibleUnits || []) {
+        if (u.hidden || (u.type !== 'builder' && u.type !== 'hunter')) continue;
+        const pl = s.players[u.owner];
+        if (!pl) continue;
+        const x = u.px + (u.x - u.px) * s.alpha();
+        const y = u.py + (u.y - u.py) * s.alpha();
+        const p = this.project(x, y, this.hAt(x, y) + (u.type === 'hunter' ? 2.9 : 1.6));
+        if (p.z > 1) continue;
+        const label = u.type === 'builder' ? `${pl.name} · Lv ${pl.level ?? 1}` : `${pl.name} · ★${Object.values(pl.hunterUp || {}).reduce((a, b) => a + b, 0)}`;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        const w = ctx.measureText(label).width + 10;
+        ctx.fillRect(p.x - w / 2, p.y - 30, w, 16);
+        ctx.fillStyle = `#${(pl.colorHex ?? 0xffffff).toString(16).padStart(6, '0')}`;
+        ctx.fillText(label, p.x, p.y - 18);
+      }
+    }
+    // floating texts
+    const now = this.time;
+    this.floats = this.floats.filter((f) => now - f.t0 < f.life);
+    ctx.textAlign = 'center';
+    for (const f of this.floats) {
+      const k = (now - f.t0) / f.life;
+      const p = this.project(f.x, f.y, this.hAt(f.x, f.y) + 1.4 + k * 1.2);
+      if (p.z > 1) continue;
+      ctx.globalAlpha = 1 - k * k;
+      ctx.font = `bold ${f.size || 13}px Segoe UI, sans-serif`;
+      ctx.fillStyle = '#000';
+      ctx.fillText(f.text, p.x + 1, p.y + 1);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
     // drag box
     if (this.dragBox) {
       const { x0, y0, x1, y1 } = this.dragBox;

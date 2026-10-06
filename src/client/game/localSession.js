@@ -1,11 +1,12 @@
 // Runs the simulation directly in the browser (single player / skirmish / attract mode).
 import { World } from '../../shared/sim/world.js';
 import { DT } from '../../shared/constants.js';
-import { canPlace } from '../../shared/sim/structures.js';
+import { TICK_RATE } from '../../shared/constants.js';
 
 export class LocalSession {
-  constructor({ mapId, players, seed = Date.now() & 0xffff, localPlayer = 0, speed = 1, fog = true, startCrystals, startWorkers }) {
-    this.world = new World({ mapId, players, seed, startCrystals, startWorkers });
+  constructor({ mapId, players, seed = Date.now() & 0xffff, localPlayer = 0, speed = 1, fog = true, startCrystals, startWorkers, mode = 'classic', duration, builderLives }) {
+    this.world = new World({ mapId, players, seed, startCrystals, startWorkers, mode, duration, builderLives });
+    this.mode = this.world.mode;
     this.map = this.world.map;
     this.localPlayer = localPlayer;
     this.speed = speed;
@@ -73,6 +74,8 @@ export class LocalSession {
 
   startLocation() {
     if (this.localPlayer < 0) return { x: this.map.width / 2, y: this.map.height / 2 };
+    const h = this.hero();
+    if (h) return { x: h.x, y: h.y };
     const p = this.world.players[this.localPlayer];
     const b = this.map.bases[p.startBase];
     return b ? { x: b.x, y: b.y } : null;
@@ -129,7 +132,24 @@ export class LocalSession {
   }
 
   canPlace(type, bx, by) {
-    return canPlace(this.world, this.localPlayer, type, bx, by);
+    return this.world.canPlace(this.localPlayer, type, bx, by);
+  }
+
+  // survival-mode clock and phase for the HUD
+  survivalInfo() {
+    const sv = this.world.survival;
+    if (!sv) return null;
+    return {
+      phase: sv.phase,
+      releaseIn: Math.max(0, (sv.releaseTick - this.world.tick) / TICK_RATE),
+      timeLeft: Math.max(0, (sv.endTick - this.world.tick) / TICK_RATE),
+      reason: sv.reason,
+    };
+  }
+
+  hero() {
+    const p = this.player();
+    return p && p.heroId ? this.world.byId.get(p.heroId) : null;
   }
 
   isPoweredAt(x, y) {
@@ -153,7 +173,19 @@ export class LocalSession {
   }
 
   stats() {
-    return this.world.players.map((p) => ({ id: p.id, name: p.name, team: p.team, colorHex: p.colorHex, ...p.stats, eliminated: p.eliminated }));
+    return this.world.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      team: p.team,
+      colorHex: p.colorHex,
+      role: p.role,
+      level: p.level,
+      lives: p.lives,
+      deaths: p.deaths,
+      hunterUp: p.hunterUp,
+      ...p.stats,
+      eliminated: p.eliminated,
+    }));
   }
 
   dispose() {}

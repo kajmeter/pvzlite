@@ -1,4 +1,4 @@
-// Procedural, original 3D models for Shardfall units, structures and neutral props.
+// Procedural, original 3D models for pvzlite units, structures and neutral props.
 // Units are described as "rigs" (part lists animated per instance), structures as Groups.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -311,6 +311,43 @@ export function buildStructureModel(type, teamHex) {
       anim.glows.push(orb);
       break;
     }
+    case 'barricade': {
+      // crystal-stone wall block with a ward node that powers turrets
+      add(g, new THREE.CylinderGeometry(0.95, 1.0, 0.3, 6), stone(STONE_DARK), { p: [0, 0.15, 0], r: [0, Math.PI / 6, 0] });
+      add(g, new THREE.CylinderGeometry(0.82, 0.92, 1.0, 6), stone(0x8a93a8), { p: [0, 0.8, 0], r: [0, Math.PI / 6, 0] });
+      add(g, new THREE.CylinderGeometry(0.62, 0.82, 0.25, 6), stone(STONE), { p: [0, 1.42, 0], r: [0, Math.PI / 6, 0] });
+      add(g, new THREE.TorusGeometry(0.86, 0.05, 4, 6), team, { p: [0, 0.65, 0], r: [Math.PI / 2, 0, Math.PI / 6] });
+      const node = pivot(g, [0, 1.75, 0]);
+      add(node, G.oct, crystalMat(teamHex, 1.0), { sc: [0.16, 0.26, 0.16] });
+      anim.spin.push({ obj: node, speed: 1.3, axis: 'y' });
+      anim.bob.push({ obj: node, base: 1.75, amp: 0.06, speed: 2.2 });
+      break;
+    }
+    case 'turret':
+    case 'lanceTurret': {
+      const heavy = type === 'lanceTurret';
+      add(g, new THREE.CylinderGeometry(0.9, 1.0, 0.35, 8), stone(STONE_DARK), { p: [0, 0.18, 0], r: [0, Math.PI / 8, 0] });
+      add(g, new THREE.CylinderGeometry(0.45, 0.7, heavy ? 1.5 : 1.0, 8), stone(0x8a93a8), { p: [0, heavy ? 1.1 : 0.85, 0] });
+      add(g, new THREE.TorusGeometry(0.62, 0.05, 4, 16), team, { p: [0, heavy ? 0.9 : 0.7, 0], r: [Math.PI / 2, 0, 0] });
+      const head = pivot(g, [0, heavy ? 2.0 : 1.55, 0]);
+      add(head, G.sph, metal(0xb7c1d6), { sc: [0.42, 0.34, 0.42] });
+      add(head, G.box, metal(0x5f6779), { p: [heavy ? 0.75 : 0.5, 0, 0], sc: [heavy ? 1.2 : 0.7, 0.14, 0.14] });
+      add(head, G.oct, crystalMat(teamHex, 1.1), { p: [heavy ? 1.4 : 0.9, 0, 0], r: [0, 0, Math.PI / 2], sc: [0.1, heavy ? 0.3 : 0.2, 0.1] });
+      add(head, G.box, tglow, { p: [0.2, 0.15, 0], sc: [0.25, 0.05, 0.36] });
+      anim.head = head;
+      break;
+    }
+    case 'mender': {
+      add(g, G.box, stone(STONE_DARK), { p: [0, 0.12, 0], sc: [1.7, 0.24, 1.7] });
+      add(g, new THREE.CylinderGeometry(0.75, 0.45, 0.5, 10), stone(STONE), { p: [0, 0.5, 0] });
+      add(g, new THREE.TorusGeometry(0.72, 0.05, 6, 24), team, { p: [0, 0.75, 0], r: [Math.PI / 2, 0, 0] });
+      const orb = pivot(g, [0, 1.3, 0]);
+      add(orb, G.ico, glow(0x7dffb0, 1.6), { sc: [0.3, 0.3, 0.3] });
+      anim.bob.push({ obj: orb, base: 1.3, amp: 0.12, speed: 2.0 });
+      anim.spin.push({ obj: orb, speed: 1.0, axis: 'y' });
+      anim.glows.push(orb);
+      break;
+    }
     default:
       add(g, G.box, stone(STONE), { p: [0, 0.5, 0], sc: [1, 1, 1] });
   }
@@ -374,6 +411,29 @@ export function buildBeaconModel() {
   const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xd8e2f0), toneMapped: false });
   add(gem, G.oct, mat, { sc: [0.32, 0.55, 0.32] });
   return { group: g, gem, mat };
+}
+
+// Ring of light pillars that holds the Hunters during the grace period
+export function buildCageModel(radius) {
+  const g = new THREE.Group();
+  const pillars = [];
+  const n = 12;
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2;
+    const x = Math.cos(a) * radius;
+    const z = Math.sin(a) * radius;
+    add(g, new THREE.CylinderGeometry(0.22, 0.32, 2.6, 6), stone(0x4c5466), { p: [x, 1.3, z] });
+    const tip = pivot(g, [x, 2.8, z]);
+    add(tip, G.oct, glow(0xff6a3d, 1.8), { sc: [0.16, 0.26, 0.16] });
+    pillars.push(tip);
+  }
+  const wall = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, 2.4, 48, 1, true),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff5a2a).multiplyScalar(1.4), transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+  );
+  wall.position.y = 1.2;
+  g.add(wall);
+  return { group: g, wall, pillars };
 }
 
 export function buildRubbleModel() {

@@ -4,5 +4,5 @@ import { App } from './app.js';
 
 const app = new App();
 // exposed for debugging, automated tests and screenshot tooling
-window.__shardfall = app;
+window.__pvzlite = app;
 app.start();

@@ -1,6 +1,6 @@
-# Shardfall dedicated server + web client
-#   docker build -t shardfall .
-#   docker run -p 7777:7777 shardfall      → open http://localhost:7777
+# pvzlite dedicated server + web client
+#   docker build -t pvzlite .
+#   docker run -p 7777:7777 pvzlite      → open http://localhost:7777
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./

@@ -1,7 +1,7 @@
-// Electron main process for the Shardfall desktop client (Windows .exe, Linux .deb/AppImage).
+// Electron main process for the pvzlite desktop client (Windows .exe, Linux .deb/AppImage).
 // - Serves the built web client through a private app:// protocol
 // - Can host a LAN multiplayer server in-process (Multiplayer → Host LAN server)
-// - `Shardfall --server [--port 7777]` runs a dedicated server without opening a window
+// - `pvzlite --server [--port 7777]` runs a dedicated server without opening a window
 const { app, BrowserWindow, ipcMain, shell, protocol, net, Menu } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -37,7 +37,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     backgroundColor: '#070b14',
-    title: 'Shardfall',
+    title: 'pvzlite',
     icon: path.join(ROOT, 'build', 'icon.png'),
     autoHideMenuBar: true,
     show: false,
@@ -69,7 +69,7 @@ if (serverMode) {
     const i = process.argv.indexOf('--port');
     const port = i > 0 ? Number(process.argv[i + 1]) : 7777;
     const info = await hostServer(port);
-    console.log(`Shardfall server listening on port ${info.port}`);
+    console.log(`pvzlite server listening on port ${info.port}`);
     for (const a of info.addresses) console.log(`  ws://${a}:${info.port}/ws   http://${a}:${info.port}`);
   });
   app.on('window-all-closed', (e) => e.preventDefault());
@@ -87,9 +87,9 @@ if (serverMode) {
       if (!file.startsWith(DIST)) return new Response('Not found', { status: 404 });
       return net.fetch(pathToFileURL(file).toString());
     });
-    ipcMain.handle('shardfall:host-server', async (_e, port) => hostServer(Number(port) || 7777));
-    ipcMain.handle('shardfall:info', () => ({ version: app.getVersion(), platform: process.platform }));
-    ipcMain.on('shardfall:quit', () => app.quit());
+    ipcMain.handle('pvzlite:host-server', async (_e, port) => hostServer(Number(port) || 7777));
+    ipcMain.handle('pvzlite:info', () => ({ version: app.getVersion(), platform: process.platform }));
+    ipcMain.on('pvzlite:quit', () => app.quit());
     createWindow();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

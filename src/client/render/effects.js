@@ -254,6 +254,12 @@ export class Effects {
         ),
       16,
     );
+    const boltGeo = new THREE.SphereGeometry(1, 10, 8);
+    this.bolts = new Pool(
+      scene,
+      () => new THREE.Mesh(boltGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })),
+      48,
+    );
     // beams: instanced thin cylinders
     const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
     beamGeo.translate(0, 0.5, 0);
@@ -278,6 +284,14 @@ export class Effects {
     this._s = new THREE.Vector3();
     this._up = new THREE.Vector3(0, 1, 0);
     this._c = new THREE.Color();
+  }
+
+  // crystal bolt fired by a turret: a glowing head travelling to the target with a trail
+  bolt(ax, ay, az, bx, by, bz, color, heavy = false) {
+    const it = this.bolts.spawn(heavy ? 0.22 : 0.16, { a: [ax, ay, az], b: [bx, by, bz], heavy, color: [color.r, color.g, color.b] });
+    it.mesh.material.color.setRGB(color.r * 2.2, color.g * 2.2, color.b * 2.2);
+    it.mesh.scale.setScalar(heavy ? 0.35 : 0.22);
+    it.mesh.position.set(ax, ay, az);
   }
 
   slash(x, y, z, facing, color, flip) {
@@ -387,6 +401,18 @@ export class Effects {
     this.flashes.update(dt, (it, f) => {
       it.mesh.material.opacity = 1 - f;
       it.mesh.scale.setScalar(it.data.size * (0.3 + f * 0.7));
+    });
+    this.bolts.update(dt, (it, f) => {
+      const { a, b, heavy, color } = it.data;
+      const x = a[0] + (b[0] - a[0]) * f;
+      const y = a[1] + (b[1] - a[1]) * f;
+      const z = a[2] + (b[2] - a[2]) * f;
+      it.mesh.position.set(x, y, z);
+      this.particles.emit(x, y, z, { count: heavy ? 3 : 1, color: [color[0] * 1.6 + 0.3, color[1] * 1.6 + 0.3, color[2] * 1.6 + 0.3], speed: 0.3, life: 0.25, size: heavy ? 0.35 : 0.2, sizeEnd: 0.02, jitter: 0.05 });
+      if (it.t + dt >= it.life) {
+        this.particles.emit(b[0], b[1], b[2], { count: heavy ? 18 : 8, color: [1.4, 1.4, 1.6], speed: heavy ? 4 : 2.5, life: 0.3, size: 0.2, gravity: 3 });
+        this.flash(b[0], b[1], b[2], heavy ? 2.4 : 1.2, 0xbfeaff, 0.18);
+      }
     });
     this.markers.update(dt, (it, f) => {
       it.mesh.material.opacity = 1 - f;

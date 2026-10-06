@@ -77,8 +77,47 @@ export const ICONS = {
   weapons: wrap(`<path d="M12 52 46 18" stroke="${C.steel}" stroke-width="5"/><path d="M40 8c10 2 16 10 16 18-4-6-10-10-18-12Z" fill="${C.blue}"/><path d="M8 40l16 16" stroke="${C.gold}" stroke-width="5"/>`),
   armor: wrap(`<path d="M32 6 52 14v16c0 14-10 24-20 28-10-4-20-14-20-28V14Z" fill="#c3cbda"/><path d="M32 14 44 19v11c0 9-6 16-12 19Z" fill="${C.steel}"/>`),
   barrier: wrap(`<circle cx="32" cy="32" r="24" fill="${C.blue}" opacity=".35"/><path d="M32 10l18 10v20L32 52 14 40V20Z" fill="none" stroke="${C.blue}" stroke-width="4"/><path d="M32 22l8 5v10l-8 5-8-5V27Z" fill="${C.white}"/>`),
+  builder: null,
+  hunter: null,
+  barricade: wrap(
+    `<path d="M14 58h36l4-8V22l-6-6H16l-6 6v28Z" fill="#8a93a8"/><path d="M10 34h44" stroke="${C.blue}" stroke-width="4"/><path d="M32 4 38 12 32 20 26 12Z" fill="${C.blue}"/><path d="M20 22v30M32 22v30M44 22v30" stroke="#5f6779" stroke-width="2"/>`,
+  ),
+  turret: wrap(
+    `<path d="M12 58h40l-4-10H16Z" fill="#4c5466"/><path d="M22 48h20l-3-18H25Z" fill="#8a93a8"/><circle cx="32" cy="24" r="10" fill="#b7c1d6"/><rect x="38" y="21" width="20" height="6" fill="#5f6779"/><path d="M58 18l6 6-6 6Z" fill="${C.blue}"/>`,
+  ),
+  lanceTurret: wrap(
+    `<path d="M12 58h40l-4-8H16Z" fill="#4c5466"/><path d="M24 50h16l-3-26H27Z" fill="#8a93a8"/><circle cx="32" cy="20" r="9" fill="#b7c1d6"/><rect x="36" y="17" width="26" height="6" fill="#5f6779"/><path d="M6 20h18" stroke="${C.blue}" stroke-width="3"/><path d="M60 14l4 6-4 6Z" fill="${C.white}"/>`,
+  ),
+  mender: wrap(
+    `<rect x="12" y="50" width="40" height="6" fill="#4c5466"/><path d="M14 36h36l-6 14H20Z" fill="#7a8296"/><circle cx="32" cy="22" r="11" fill="#7dffb0"/><path d="M32 15v14M25 22h14" stroke="#0b3a20" stroke-width="4"/>`,
+  ),
+  levelUp: wrap(
+    `<circle cx="32" cy="32" r="26" fill="#1d5fa8"/><path d="M32 12 48 32H38v18H26V32H16Z" fill="${C.gold}"/><path d="M32 12 48 32H38" fill="#fff" opacity=".35"/>`,
+  ),
+  sprint: wrap(
+    `<path d="M6 44h18M2 34h20M8 24h16" stroke="${C.green}" stroke-width="4" stroke-linecap="round"/><ellipse cx="42" cy="30" rx="16" ry="6" fill="none" stroke="${C.steel}" stroke-width="3"/><path d="M28 30a14 11 0 0 1 28 0Z" fill="#d9c58f"/><path d="M42 20 47 30 42 40 37 30Z" fill="${C.blue}"/>`,
+  ),
+  reveal: wrap(
+    `<circle cx="32" cy="32" r="26" fill="none" stroke="#ff7a4a" stroke-width="3"/><circle cx="32" cy="32" r="16" fill="none" stroke="#ff7a4a" stroke-width="3" opacity=".7"/><path d="M8 32c8-12 40-12 48 0-8 12-40 12-48 0Z" fill="#2a1208" stroke="${C.gold}" stroke-width="3"/><circle cx="32" cy="32" r="7" fill="${C.gold}"/>`,
+  ),
+  up_blades: wrap(
+    `<path d="M10 54 44 20" stroke="${C.steel}" stroke-width="5"/><path d="M38 8c12 2 18 12 18 20-4-8-12-12-20-14Z" fill="${C.white}"/><path d="M50 4l10 10" stroke="${C.gold}" stroke-width="4"/><path d="M8 40l16 16" stroke="${C.gold}" stroke-width="5"/>`,
+  ),
+  up_armor: wrap(`<path d="M32 6 52 14v16c0 14-10 24-20 28-10-4-20-14-20-28V14Z" fill="#a9b4c8"/><path d="M32 14 44 19v11c0 9-6 16-12 19Z" fill="#7a8296"/><path d="M24 30l6 6 12-12" stroke="${C.gold}" stroke-width="4" fill="none"/>`),
+  up_vitality: wrap(`<path d="M32 56C10 40 6 28 14 18c6-8 14-6 18 2 4-8 12-10 18-2 8 10 4 22-18 38Z" fill="${C.red}"/><path d="M26 30h12M32 24v12" stroke="#fff" stroke-width="4"/>`),
+  up_barrier: wrap(`<circle cx="32" cy="32" r="24" fill="${C.blue}" opacity=".35"/><path d="M32 10l18 10v20L32 52 14 40V20Z" fill="none" stroke="${C.blue}" stroke-width="4"/><path d="M26 32h12M32 26v12" stroke="#fff" stroke-width="4"/>`),
+  up_swiftness: wrap(`<path d="M6 44h20M4 32h22M8 20h18" stroke="${C.green}" stroke-width="4" stroke-linecap="round"/><path d="M30 14l26 18-26 18 6-18Z" fill="${C.white}"/>`),
+  up_sunder: wrap(`<rect x="8" y="34" width="22" height="22" fill="#8a93a8"/><rect x="34" y="34" width="22" height="22" fill="#8a93a8"/><path d="M40 6l-10 22 8 0-8 22" stroke="${C.gold}" stroke-width="4" fill="none"/>`),
+  up_lunge: wrap(`<path d="M8 44h20M4 34h22M10 24h18" stroke="${C.blue}" stroke-width="4" stroke-linecap="round"/><path d="M30 18l26 14-26 14 6-14Z" fill="${C.gold}"/>`),
   autocast: wrap(`<circle cx="32" cy="32" r="20" fill="none" stroke="${C.gold}" stroke-width="4" stroke-dasharray="6 6"/>`),
 };
+
+ICONS.builder = ICONS.shaper;
+ICONS.hunter = ICONS.lancer;
+ICONS.essence = wrap(`<path d="M32 4c10 14 18 22 18 34a18 18 0 0 1-36 0C14 26 22 18 32 4Z" fill="#ff7a4a"/><path d="M32 22c5 7 8 11 8 17a8 8 0 0 1-16 0c0-6 3-10 8-17Z" fill="${C.gold}"/>`);
+ICONS.level = wrap(`<path d="M32 4 40 22 60 24 45 37 50 58 32 47 14 58 19 37 4 24 24 22Z" fill="${C.gold}"/>`);
+ICONS.lives = wrap(`<path d="M32 56C10 40 6 28 14 18c6-8 14-6 18 2 4-8 12-10 18-2 8 10 4 22-18 38Z" fill="${C.red}"/>`);
+ICONS.timer = wrap(`<circle cx="32" cy="36" r="22" fill="none" stroke="${C.white}" stroke-width="5"/><path d="M32 36V22M26 6h12" stroke="${C.white}" stroke-width="5" stroke-linecap="round"/>`);
 
 export function icon(name) {
   return ICONS[name] || ICONS.build;

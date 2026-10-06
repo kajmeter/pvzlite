@@ -143,7 +143,7 @@ export function instGlow() {
 export function hologram(hex) {
   return cached(`holo${hex}`, () =>
     new THREE.MeshBasicMaterial({
-      color: new THREE.Color(hex).multiplyScalar(1.3),
+      color: new THREE.Color(hex).multiplyScalar(0.9),
       transparent: true,
       opacity: 0.32,
       depthWrite: false,

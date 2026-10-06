@@ -1,8 +1,8 @@
 {
-  "name": "shardfall",
-  "productName": "Shardfall",
+  "name": "pvzlite",
+  "productName": "pvzlite",
   "version": "1.0.0",
-  "description": "Shardfall - a fast, lightweight 3D real-time strategy game (worker economy + shielded melee warriors) built with three.js. Play in the browser, on desktop, or host your own multiplayer server.",
+  "description": "pvzlite - Shapers vs Lancers: a 3D survival RTS built with three.js. Mine crystals, wall yourself in, build turrets and level up while Hunters upgrade their blades to break in. Play in the browser, on desktop, or host your own multiplayer server.",
   "type": "module",
   "main": "desktop/main.cjs",
   "homepage": "https://github.com/kajmeter/pvzlite",
@@ -25,7 +25,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "lint": "node scripts/check-syntax.mjs",
     "desktop": "npm run build && electron .",
     "dist:linux": "npm run build && electron-builder --linux deb AppImage --publish never",
     "dist:win": "npm run build && electron-builder --win nsis portable --publish never",
@@ -50,8 +49,8 @@
     "node": ">=20"
   },
   "build": {
-    "appId": "io.github.kajmeter.shardfall",
-    "productName": "Shardfall",
+    "appId": "io.github.kajmeter.pvzlite",
+    "productName": "pvzlite",
     "copyright": "Copyright (c) 2026 kajmeter. Licensed under Apache-2.0.",
     "directories": {
       "output": "release",
@@ -67,7 +66,7 @@
       "!**/*.map"
     ],
     "asar": true,
-    "artifactName": "Shardfall-${version}-${os}-${arch}.${ext}",
+    "artifactName": "pvzlite-${version}-${os}-${arch}.${ext}",
     "win": {
       "target": [
         {
@@ -92,11 +91,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Shardfall",
-      "artifactName": "Shardfall-Setup-${version}.${ext}"
+      "shortcutName": "pvzlite",
+      "artifactName": "pvzlite-Setup-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "Shardfall-Portable-${version}.${ext}"
+      "artifactName": "pvzlite-Portable-${version}.${ext}"
     },
     "linux": {
       "target": [
@@ -105,27 +104,27 @@
       ],
       "category": "Game",
       "icon": "build/icons",
-      "executableName": "shardfall",
+      "executableName": "pvzlite",
       "maintainer": "kajmeter <kajetankarp@gmail.com>",
       "vendor": "kajmeter",
-      "synopsis": "3D real-time strategy game built with three.js",
-      "description": "Shardfall is a fast 3D real-time strategy game: harvest crystals with Shaper drones, build a crystal citadel and command Lancer knights against AI or friends over LAN/Internet.",
+      "synopsis": "Shapers vs Lancers - 3D survival RTS",
+      "description": "pvzlite is a 3D survival RTS: Shapers mine crystal fields, wall themselves in, build turrets and level up to 11 while Lancer Hunters upgrade their blades and armor to break in. Play against AI or friends over LAN/Internet.",
       "desktop": {
         "entry": {
-          "Name": "Shardfall",
-          "Comment": "3D real-time strategy game",
+          "Name": "pvzlite",
+          "Comment": "Shapers vs Lancers survival RTS",
           "Categories": "Game;StrategyGame;",
-          "StartupWMClass": "Shardfall"
+          "StartupWMClass": "pvzlite"
         }
       }
     },
     "deb": {
-      "artifactName": "shardfall_${version}_amd64.${ext}"
+      "artifactName": "pvzlite_${version}_amd64.${ext}"
     },
     "appImage": {
-      "artifactName": "Shardfall-${version}-x86_64.${ext}"
+      "artifactName": "pvzlite-${version}-x86_64.${ext}"
     },
     "publish": null
   },
-  "desktopName": "shardfall.desktop"
+  "desktopName": "pvzlite.desktop"
 }

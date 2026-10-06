@@ -60,13 +60,13 @@ describe('http', () => {
     const r = await fetch(`${base}/health`);
     const j = await r.json();
     expect(j.ok).toBe(true);
-    expect(j.name).toBe('shardfall');
+    expect(j.name).toBe('pvzlite');
   });
 
   it('serves the web client with the server flag injected', async () => {
     const r = await fetch(`${base}/`);
     const t = await r.text();
-    expect(t).toContain('__SHARDFALL_SERVER__');
+    expect(t).toContain('__PVZLITE_SERVER__');
   });
 
   it('lists maps', async () => {
@@ -79,7 +79,7 @@ describe('multiplayer flow', () => {
   it('creates a room, joins, starts and streams snapshots', async () => {
     const a = await client('Alice');
     const b = await client('Bob');
-    a.send({ t: 'create', name: 'Test game', mapId: 'proving' });
+    a.send({ t: 'create', name: 'Test game', mapId: 'proving', mode: 'classic' });
     const roomMsg = await a.wait((m) => m.t === 'room');
     expect(roomMsg.room.slots).toHaveLength(1);
     b.send({ t: 'list' });
@@ -111,7 +111,7 @@ describe('multiplayer flow', () => {
     // issue a command: train a Shaper at our Citadel
     const citadel = snap.buildings.find((r) => r[2] === 0);
     a.send({ t: 'cmd', cmd: { type: 'train', ids: [citadel[0]], unit: 'shaper' } });
-    const later = await a.wait((m) => m.t === 'snap' && m.buildings.some((r) => r[0] === citadel[0] && r[16] && r[16].length === 1), 3000);
+    const later = await a.wait((m) => m.t === 'snap' && m.buildings.some((r) => r[0] === citadel[0] && r[13] && r[13][3].length === 1), 3000);
     expect(later).toBeTruthy();
     // leaving a running game surrenders
     b.send({ t: 'leave' });
@@ -124,7 +124,7 @@ describe('multiplayer flow', () => {
 
   it('host can add AI players', async () => {
     const a = await client('Host');
-    a.send({ t: 'create', name: 'AI game', mapId: 'quarry' });
+    a.send({ t: 'create', name: 'AI game', mapId: 'quarry', mode: 'classic' });
     await a.wait((m) => m.t === 'room');
     a.send({ t: 'addAI', difficulty: 'easy' });
     a.send({ t: 'addAI', difficulty: 'hard' });
@@ -146,5 +146,35 @@ describe('multiplayer flow', () => {
     const pong = await a.wait((m) => m.t === 'pong');
     expect(pong.time).toBe(1);
     a.ws.close();
+  });
+});
+
+describe('survival multiplayer', () => {
+  it('starts a survival room with a Shaper and a Hunter', async () => {
+    const a = await client('Shaper');
+    const b = await client('Hunter');
+    a.send({ t: 'create', name: 'PvZ night', mapId: 'wilds', mode: 'survival' });
+    const r = await a.wait((m) => m.t === 'room');
+    expect(r.room.mode).toBe('survival');
+    b.send({ t: 'join', roomId: r.room.id });
+    const r2 = await a.wait((m) => m.t === 'room' && m.room.slots.length === 2);
+    expect(r2.room.slots[1].role).toBe('hunter');
+    a.send({ t: 'addAI', difficulty: 'easy' });
+    await a.wait((m) => m.t === 'room' && m.room.slots.length === 3);
+    b.send({ t: 'ready', ready: true });
+    await a.wait((m) => m.t === 'room' && m.room.slots[1] && m.room.slots[1].ready);
+    a.send({ t: 'start' });
+    const sa = await a.wait((m) => m.t === 'start');
+    expect(sa.mode).toBe('survival');
+    const snap = await a.wait((m) => m.t === 'snap' && m.survival);
+    expect(snap.survival.phase).toBe('grace');
+    const me = snap.players[0];
+    expect(me.role).toBe('builder');
+    expect(me.crystals).toBeGreaterThan(0);
+    const hero = snap.units.find((u) => u[0] === me.heroId);
+    expect(hero[16][0]).toBeGreaterThan(0); // hero max hull is streamed
+    a.send({ t: 'cmd', cmd: { type: 'levelUp' } });
+    a.ws.close();
+    b.ws.close();
   });
 });

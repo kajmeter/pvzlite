@@ -6,15 +6,17 @@ export const PROTOCOL_VERSION = 1;
 export const SNAPSHOT_EVERY = 2; // ticks between snapshots (10 Hz)
 export const SNAPSHOT_INTERVAL = SNAPSHOT_EVERY / TICK_RATE;
 
-const TYPES = ['shaper', 'lancer', 'citadel', 'conduit', 'siphon', 'portal', 'foundry', 'archive', 'sanctum', 'aegis', 'crystal', 'vent', 'beacon', 'rubble'];
+const TYPES = ['shaper', 'lancer', 'citadel', 'conduit', 'siphon', 'portal', 'foundry', 'archive', 'sanctum', 'aegis', 'crystal', 'vent', 'beacon', 'rubble', 'builder', 'hunter', 'barricade', 'turret', 'mender', 'lanceTurret'];
 export const TYPE_INDEX = Object.fromEntries(TYPES.map((t, i) => [t, i]));
 export const TYPE_NAME = TYPES;
 
 const r1 = (v) => Math.round(v * 100) / 100;
 
 // Events worth forwarding to clients (only if the player can see them / owns them)
-const PUBLIC_EVENTS = new Set(['strike', 'hit', 'death', 'lunge', 'warpStart', 'warped', 'eliminated', 'gameOver']);
-const OWNER_EVENTS = new Set(['buildStart', 'buildDone', 'trained', 'research', 'error', 'alert', 'phase', 'overclock']);
+const PUBLIC_EVENTS = new Set(['strike', 'hit', 'death', 'lunge', 'warpStart', 'warped', 'eliminated', 'gameOver', 'bolt', 'sprint']);
+const OWNER_EVENTS = new Set(['buildStart', 'buildDone', 'trained', 'research', 'error', 'alert', 'phase', 'overclock', 'upgraded', 'mined']);
+// survival announcements everybody receives
+const GLOBAL_EVENTS = new Set(['release', 'builderDown', 'hunterDown', 'levelUp', 'reveal', 'respawn']);
 
 function unitRow(u, own) {
   const row = [
@@ -34,7 +36,13 @@ function unitRow(u, own) {
     u.warping > 0 ? r1(u.warping) : 0,
     u.warpTotal ? r1(u.warpTotal) : 0,
   ];
-  if (own) row.push(u.orders.length === 0 ? 1 : 0, u.autocast?.lunge === false ? 0 : 1);
+  row.push(own ? [u.orders.length === 0 ? 1 : 0, u.autocast?.lunge === false ? 0 : 1] : 0);
+  // hero stats change with levels / upgrades (survival)
+  row.push(
+    u.def.survival
+      ? [u.maxHp, u.maxBarrier, u.armor, r1(u.speedOverride || 0), r1(u.damage || 0), r1(u.structureBonus || 1), u.mineYield || 0, u.caged ? 1 : 0, u.sprintUntil > 0 ? 1 : 0]
+      : 0,
+  );
   return row;
 }
 
@@ -54,16 +62,19 @@ function buildingRow(b, own) {
     b.beam || 0,
     b.overclock > 0 ? r1(b.overclock) : 0,
   ];
-  if (own) {
-    row.push(
-      Math.floor(b.energy * 10) / 10,
-      r1(b.warpCd || 0),
-      r1(b.transform || 0),
-      b.queue.map((q) => [q.kind === 'unit' ? 0 : 1, q.id, r1(q.progress), q.time, q.level || 0]),
-      b.rally ? [r1(b.rally.x), r1(b.rally.y), b.rally.target || 0] : 0,
-      b.vent ? b.vent.amount : -1,
-    );
-  }
+  row.push(
+    own
+      ? [
+          Math.floor(b.energy * 10) / 10,
+          r1(b.warpCd || 0),
+          r1(b.transform || 0),
+          b.queue.map((q) => [q.kind === 'unit' ? 0 : 1, q.id, r1(q.progress), q.time, q.level || 0]),
+          b.rally ? [r1(b.rally.x), r1(b.rally.y), b.rally.target || 0] : 0,
+          b.vent ? b.vent.amount : -1,
+        ]
+      : 0,
+  );
+  row.push(b.def.survival ? [b.maxHp, b.maxBarrier, b.level || 0, r1(b.aim || 0), r1(b.weaponDamage || 0), b.weaponRange || 0] : 0);
   return row;
 }
 
@@ -97,6 +108,10 @@ export function makeSnapshot(world, playerId, events, full = false) {
   }
   const outEvents = [];
   for (const ev of events) {
+    if (GLOBAL_EVENTS.has(ev.e)) {
+      outEvents.push(ev);
+      continue;
+    }
     if (OWNER_EVENTS.has(ev.e)) {
       if (ev.owner === playerId || (ev.e === 'overclock' && world.byId.get(ev.id)?.owner === playerId) || (ev.e === 'phase' && world.byId.get(ev.id)?.owner === playerId)) outEvents.push(ev);
     } else if (PUBLIC_EVENTS.has(ev.e)) {
@@ -107,11 +122,28 @@ export function makeSnapshot(world, playerId, events, full = false) {
   const players = world.players.map((pl) => ({
     id: pl.id,
     eliminated: pl.eliminated,
+    ...(world.mode === 'survival'
+      ? { role: pl.role, level: pl.level, lives: pl.lives, heroId: pl.heroId, deaths: pl.deaths, hunterUp: pl.hunterUp, respawnAt: pl.respawnAt, stats: { builderKills: pl.stats.builderKills, hunterKills: pl.stats.hunterKills } }
+      : {}),
     // only reveal economy details for yourself
     ...(pl.id === playerId
-      ? { crystals: Math.floor(pl.crystals), flux: Math.floor(pl.flux), supplyUsed: pl.supplyUsed, supplyCap: pl.supplyCap, upgrades: pl.upgrades, researching: pl.researching }
+      ? {
+          crystals: Math.floor(pl.crystals),
+          flux: Math.floor(pl.flux),
+          supplyUsed: pl.supplyUsed,
+          supplyCap: pl.supplyCap,
+          upgrades: pl.upgrades,
+          researching: pl.researching,
+          essence: Math.floor(pl.essence || 0),
+          sprintCd: r1(pl.sprintCd || 0),
+          revealCd: r1(pl.revealCd || 0),
+        }
       : { upgrades: pl.upgrades }),
   }));
+  const sv = world.survival;
+  const survival = sv
+    ? { phase: sv.phase, releaseIn: Math.max(0, (sv.releaseTick - world.tick) / TICK_RATE), timeLeft: Math.max(0, (sv.endTick - world.tick) / TICK_RATE), reason: sv.reason }
+    : null;
   // vision as run-length encoded bytes (visible / explored)
   let vision = null;
   if (p) vision = rle(world.vision[team], world.explored[team]);
@@ -125,6 +157,7 @@ export function makeSnapshot(world, playerId, events, full = false) {
     players,
     events: outEvents,
     vision,
+    survival,
     over: world.over ? 1 : 0,
     winnerTeam: world.winnerTeam,
   };

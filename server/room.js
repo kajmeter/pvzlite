@@ -7,11 +7,13 @@ import { makeSnapshot, SNAPSHOT_EVERY } from '../src/shared/net/protocol.js';
 let roomSerial = 1;
 
 export class Room {
-  constructor(server, host, name, mapId) {
+  constructor(server, host, name, mapId, mode = 'survival') {
     this.server = server;
     this.id = `r${roomSerial++}`;
     this.name = String(name || 'Game').slice(0, 32);
-    this.mapId = listMaps().some((m) => m.id === mapId) ? mapId : 'frostgate';
+    this.mode = mode === 'classic' ? 'classic' : 'survival';
+    const valid = listMaps(this.mode);
+    this.mapId = valid.some((m) => m.id === mapId) ? mapId : valid[0].id;
     this.hostId = host.id;
     this.slots = [];
     this.started = false;
@@ -27,6 +29,7 @@ export class Room {
   }
 
   get maxPlayers() {
+    if (this.mode === 'survival') return Math.min(10, this.map.builderSpawns.length + 2);
     return this.map.players;
   }
 
@@ -36,6 +39,7 @@ export class Room {
       name: this.name,
       mapId: this.mapId,
       mapName: this.map.name,
+      mode: this.mode,
       players: this.slots.length,
       maxPlayers: this.maxPlayers,
       started: this.started,
@@ -47,9 +51,10 @@ export class Room {
       id: this.id,
       name: this.name,
       mapId: this.mapId,
+      mode: this.mode,
       host: this.hostId,
       started: this.started,
-      slots: this.slots.map((s) => ({ clientId: s.clientId ?? null, name: s.name, ai: !!s.ai, difficulty: s.difficulty, color: s.color, team: s.team, ready: !!s.ready })),
+      slots: this.slots.map((s) => ({ clientId: s.clientId ?? null, name: s.name, ai: !!s.ai, difficulty: s.difficulty, color: s.color, team: s.team, role: s.role, ready: !!s.ready })),
     };
   }
 
@@ -66,7 +71,8 @@ export class Room {
   addClient(client) {
     if (this.started) return 'Game already started';
     if (this.slots.length >= this.maxPlayers) return 'Room is full';
-    this.slots.push({ clientId: client.id, name: client.name, color: this.freeColor(), team: this.freeTeam(), ready: false });
+    const hunters = this.slots.filter((s) => s.role === 'hunter').length;
+    this.slots.push({ clientId: client.id, name: client.name, color: this.freeColor(), team: this.freeTeam(), role: this.slots.length > 0 && hunters === 0 ? 'hunter' : 'builder', ready: false });
     client.room = this;
     this.broadcastState();
     return null;
@@ -75,7 +81,8 @@ export class Room {
   addAI(difficulty) {
     if (this.started || this.slots.length >= this.maxPlayers) return;
     const d = AI_DIFFICULTIES.includes(difficulty) ? difficulty : 'normal';
-    this.slots.push({ ai: true, difficulty: d, name: `AI (${d})`, color: this.freeColor(), team: this.freeTeam(), ready: true });
+    const hunters = this.slots.filter((s) => s.role === 'hunter').length;
+    this.slots.push({ ai: true, difficulty: d, name: `AI (${d})`, color: this.freeColor(), team: this.freeTeam(), role: hunters === 0 ? 'hunter' : 'builder', ready: true });
     this.broadcastState();
   }
 
@@ -109,6 +116,7 @@ export class Room {
       if (!this.slots.some((o) => o !== s && o.color === patch.color)) s.color = patch.color;
     }
     if (typeof patch.team === 'number' && patch.team >= 1 && patch.team <= 8) s.team = patch.team;
+    if (patch.role === 'builder' || patch.role === 'hunter') s.role = patch.role;
     if (s.ai && typeof patch.difficulty === 'string' && AI_DIFFICULTIES.includes(patch.difficulty)) {
       s.difficulty = patch.difficulty;
       s.name = `AI (${s.difficulty})`;
@@ -142,7 +150,9 @@ export class Room {
 
   setMap(client, mapId) {
     if (client.id !== this.hostId || this.started) return;
-    if (!listMaps().some((m) => m.id === mapId)) return;
+    const m = listMaps().find((x) => x.id === mapId);
+    if (!m) return;
+    if (this.mode === 'classic' && m.mode !== 'classic') return;
     this.mapId = mapId;
     while (this.slots.length > this.maxPlayers) {
       const idx = this.slots.findLastIndex((s) => s.ai);
@@ -173,16 +183,20 @@ export class Room {
   start(client) {
     if (client.id !== this.hostId || this.started) return 'Only the host can start';
     if (this.slots.length < 2) return 'Need at least two players (add an AI)';
-    if (new Set(this.slots.map((s) => s.team)).size < 2) return 'Need at least two different teams';
+    if (this.mode === 'survival') {
+      if (!this.slots.some((s) => s.role === 'hunter')) return 'Need at least one Hunter';
+      if (!this.slots.some((s) => s.role !== 'hunter')) return 'Need at least one Shaper';
+      if (this.slots.filter((s) => s.role !== 'hunter').length > this.map.builderSpawns.length) return 'Too many Shapers for this map';
+    } else if (new Set(this.slots.map((s) => s.team)).size < 2) return 'Need at least two different teams';
     const notReady = this.slots.filter((s) => s.clientId && s.clientId !== this.hostId && !s.ready);
     if (notReady.length) return `Waiting for ${notReady.map((s) => s.name).join(', ')} to be ready`;
     this.started = true;
     const seed = Math.floor(Math.random() * 1e9);
-    const players = this.slots.map((s) => ({ name: s.name, team: s.team, color: s.color, type: s.ai ? 'ai' : 'human', difficulty: s.difficulty }));
-    this.world = new World({ mapId: this.mapId, players, seed });
+    const players = this.slots.map((s) => ({ name: s.name, team: s.team, color: s.color, type: s.ai ? 'ai' : 'human', difficulty: s.difficulty, role: s.role || 'builder' }));
+    this.world = new World({ mapId: this.mapId, players, seed, mode: this.mode });
     this.slots.forEach((s, i) => {
       const c = s.clientId && this.server.clients.get(s.clientId);
-      if (c) c.send({ t: 'start', mapId: this.mapId, players: players.map(({ name, team, color, type }) => ({ name, team, color, type })), localPlayer: i, seed });
+      if (c) c.send({ t: 'start', mapId: this.mapId, mode: this.mode, players: players.map(({ name, team, color, type, role }) => ({ name, team, color, type, role })), localPlayer: i, seed });
     });
     this.server.log(`room ${this.id} started on ${this.mapId} with ${players.length} players`);
     this.server.broadcastRooms();
@@ -220,7 +234,10 @@ export class Room {
         const c = s.clientId && !s.left && this.server.clients.get(s.clientId);
         if (!c) return;
         const snap = makeSnapshot(w, i, events);
-        if (w.over) snap.stats = w.players.map((p) => ({ id: p.id, name: p.name, team: p.team, colorHex: p.colorHex, ...p.stats, timeline: undefined, eliminated: p.eliminated }));
+        if (w.over) {
+          snap.stats = w.players.map((p) => ({ id: p.id, name: p.name, team: p.team, colorHex: p.colorHex, role: p.role, level: p.level, lives: p.lives, deaths: p.deaths, hunterUp: p.hunterUp, ...p.stats, timeline: undefined, eliminated: p.eliminated }));
+          snap.reason = w.survival ? w.survival.reason : '';
+        }
         c.send(snap);
       });
     }

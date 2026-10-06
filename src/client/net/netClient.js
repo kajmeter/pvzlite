@@ -1,4 +1,4 @@
-// WebSocket client for Shardfall multiplayer servers.
+// WebSocket client for pvzlite multiplayer servers.
 import { PROTOCOL_VERSION } from '../../shared/net/protocol.js';
 
 export function normalizeUrl(url) {
@@ -135,8 +135,8 @@ export class NetClient {
     this.send({ t: 'list' });
   }
 
-  createRoom(name, mapId) {
-    this.send({ t: 'create', name, mapId });
+  createRoom(name, mapId, mode = 'survival') {
+    this.send({ t: 'create', name, mapId, mode });
   }
 
   joinRoom(roomId) {

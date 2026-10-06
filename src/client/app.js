@@ -7,10 +7,11 @@ import { LocalSession } from './game/localSession.js';
 import { NetClient } from './net/netClient.js';
 import { RemoteSession } from './net/remoteSession.js';
 import { AIController } from '../shared/ai/ai.js';
+import { SurvivalAI } from '../shared/ai/survivalAi.js';
 import { drawMapPreview } from './ui/minimap.js';
 import { getMap } from '../shared/maps/index.js';
 
-const SETTINGS_KEY = 'shardfall.settings.v1';
+const SETTINGS_KEY = 'pvzlite.settings.v1';
 
 const DEFAULTS = {
   quality: 'high',
@@ -72,7 +73,7 @@ export class App {
         const w = world();
         if (!w) return false;
         w.players[pid].difficulty = difficulty;
-        w.ais.push(new AIController(w, pid));
+        w.ais.push(w.mode === 'survival' ? new SurvivalAI(w, pid) : new AIController(w, pid));
         return true;
       },
       run(ticks) {
@@ -150,10 +151,10 @@ export class App {
   }
 
   defaultServerUrl() {
-    if (window.shardfallDesktop) return 'ws://localhost:7777/ws';
+    if (window.pvzliteDesktop) return 'ws://localhost:7777/ws';
     if (location.protocol === 'http:' || location.protocol === 'https:') {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      if (window.__SHARDFALL_SERVER__) return `${proto}//${location.host}/ws`;
+      if (window.__PVZLITE_SERVER__) return `${proto}//${location.host}/ws`;
       return `${proto}//${location.hostname}:7777/ws`;
     }
     return 'ws://localhost:7777/ws';
@@ -198,7 +199,18 @@ export class App {
   start() {
     const boot = document.getElementById('boot');
     const play = this.params.get('play');
-    if (play) {
+    const survive = this.params.get('survive');
+    if (survive) {
+      // quick start: ?survive=<mapId>&role=builder|hunter&ai=<difficulty>&allies=n&hunters=n
+      const role = this.params.get('role') || 'builder';
+      const diff = this.params.get('ai') || 'normal';
+      const players = [{ name: this.settings.playerName || 'Commander', type: 'human', role, color: 0 }];
+      const allies = Number(this.params.get('allies') ?? (role === 'builder' ? 3 : 4));
+      const hunters = Number(this.params.get('hunters') ?? (role === 'builder' ? 1 : 0));
+      ['Aster', 'Brill', 'Cobalt', 'Dusk', 'Ember', 'Frost', 'Glint'].slice(0, allies).forEach((n, i) => players.push({ name: `${n} (AI)`, type: 'ai', role: 'builder', difficulty: diff, color: i + 2 }));
+      ['Ravager', 'Talon'].slice(0, hunters).forEach((n, i) => players.push({ name: `${n} (AI)`, type: 'ai', role: 'hunter', difficulty: diff, color: i === 0 ? 1 : 7 }));
+      this.startSurvival({ mapId: survive, players, seed: Number(this.params.get('seed')) || 7, speed: Number(this.params.get('speed')) || 1 });
+    } else if (play) {
       // quick start: ?play=<mapId>&ai=<difficulty>&seed=n
       const diff = this.params.get('ai') || 'normal';
       this.startSkirmish({
@@ -220,32 +232,60 @@ export class App {
   }
 
   startAttract() {
-    const maps = ['frostgate', 'verdant', 'ember', 'proving'];
+    // menu background: an AI survival match (Shapers fortifying, Hunters breaking in)
+    const maps = ['wilds', 'expanse', 'labyrinth'];
     const mapId = this.params.get('attractMap') || maps[Math.floor(Math.random() * maps.length)];
+    const classic = !getMap(mapId).mode || getMap(mapId).mode === 'classic';
+    const players = classic
+      ? [
+          { name: 'Azure', type: 'ai', difficulty: 'brutal', color: 0, team: 1 },
+          { name: 'Crimson', type: 'ai', difficulty: 'brutal', color: 1, team: 2 },
+        ]
+      : [
+          ...['Aster', 'Brill', 'Cobalt', 'Dusk', 'Ember'].map((name, i) => ({ name, type: 'ai', role: 'builder', difficulty: 'hard', color: [0, 2, 3, 5, 6][i] })),
+          { name: 'Ravager', type: 'ai', role: 'hunter', difficulty: 'brutal', color: 1 },
+          { name: 'Talon', type: 'ai', role: 'hunter', difficulty: 'hard', color: 4 },
+        ];
     const session = new LocalSession({
       mapId,
       seed: (Math.random() * 1e6) | 0,
       localPlayer: -1,
-      speed: 1.6,
+      speed: classic ? 1.6 : 1.2,
       fog: false,
-      startCrystals: 600,
-      players: [
-        { name: 'Azure', type: 'ai', difficulty: 'brutal', color: 0, team: 1 },
-        { name: 'Crimson', type: 'ai', difficulty: 'brutal', color: 1, team: 2 },
-      ],
+      mode: classic ? 'classic' : 'survival',
+      startCrystals: classic ? 600 : undefined,
+      duration: 1500,
+      players,
     });
     // fast-forward so the menu shows a developed game
-    session.world.run(20 * 150);
+    session.world.run(20 * (classic ? 150 : 170));
     const game = new Game(this, session, { attract: true });
     this.setGame(game);
-    const p = session.world.players[0];
-    const b = session.map.bases[p.startBase];
-    this.renderer.rtsCamera.jumpTo(b.x + 10, b.y + 12);
+    const a = game.findAction();
+    const c = a || session.map.cage || { x: session.map.width / 2, y: session.map.height / 2 };
+    this.renderer.rtsCamera.jumpTo(c.x - 9, c.y + 4);
     this.renderer.rtsCamera.targetDistance = 30;
   }
 
   restartAttract() {
     if (this.game && this.game.attract) this.startAttract();
+  }
+
+  startSurvival(cfg) {
+    this.lastSurvival = cfg;
+    this.menus.clear();
+    this.menus.closeModal();
+    const session = new LocalSession({
+      mapId: cfg.mapId,
+      players: cfg.players,
+      seed: cfg.seed ?? ((Math.random() * 1e6) | 0),
+      localPlayer: cfg.players.findIndex((p) => p.type === 'human'),
+      speed: cfg.speed || 1,
+      mode: 'survival',
+      duration: cfg.duration,
+      builderLives: cfg.builderLives,
+    });
+    this.setGame(new Game(this, session));
   }
 
   startSkirmish(cfg) {
@@ -269,6 +309,7 @@ export class App {
     await net.connect(url, name);
     this.net = net;
     net.onStart = (msg) => {
+      this.lastSurvival = null;
       const session = new RemoteSession(net, msg);
       this.menus.clear();
       this.menus.closeModal();

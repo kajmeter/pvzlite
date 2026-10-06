@@ -1,6 +1,8 @@
 // Builds the command card (buttons, hotkeys, tooltips) for the current selection.
 import { UNITS, BUILDINGS, RESEARCH, BUILD_ORDER_MENU } from '../../shared/data/defs.js';
 import { OVERCLOCK_COST } from '../../shared/constants.js';
+import { SURVIVAL_BUILDINGS, SURVIVAL_BUILD_MENU, HUNTER_UPGRADES, HUNTER_UPGRADE_ORDER, upgradeCost, levelCost, builderStats, SURVIVAL } from '../../shared/data/survival.js';
+import { SPRINT } from '../../shared/sim/survival.js';
 
 const BUILD_POS = {
   citadel: [0, 0],
@@ -157,6 +159,105 @@ export function commandCard(ctx) {
   }
   if (lead.queue && lead.queue.length) {
     buttons.push({ id: 'cancelQueue', icon: 'cancel', hotkey: 'Escape', label: 'Esc', pos: [4, 2], action: { cmd: { type: 'cancel', building: lead.id } }, tooltip: { title: 'Cancel', desc: 'Cancel the last item in the queue (full refund).' } });
+  }
+  return buttons;
+}
+
+// ---------------------------------------------------------------- survival (pvzlite) command card
+
+const UPGRADE_POS = { blades: [0, 1], armor: [1, 1], vitality: [2, 1], barrier: [0, 2], swiftness: [1, 2], sunder: [2, 2], lunge: [3, 2] };
+
+export function survivalCard(ctx) {
+  const { session, selection, mode } = ctx;
+  const me = session.localPlayer;
+  const p = session.player();
+  if (!p) return [];
+  const own = selection.filter((e) => e.owner === me);
+  const modeIs = (k, t) => mode && mode.kind === k && (!t || mode.type === t);
+  const buttons = [];
+  const hero = own.find((e) => e.type === 'builder' || e.type === 'hunter');
+  if (!hero) {
+    const b = own.find((e) => e.kind === 'building');
+    if (b && !b.built) buttons.push({ id: 'cancelBuild', icon: 'cancel', hotkey: 'Escape', label: 'Esc', pos: [4, 2], action: { cmd: { type: 'cancel', building: b.id } }, tooltip: { title: 'Cancel Construction', desc: 'Refunds 75% of the cost.' } });
+    return buttons;
+  }
+  buttons.push({ id: 'move', icon: 'move', hotkey: 'M', pos: [0, 0], active: modeIs('move'), action: { mode: 'move' }, tooltip: { title: 'Move', desc: 'Move to a location.' } });
+  buttons.push({ id: 'stop', icon: 'stop', hotkey: 'S', pos: [1, 0], action: { cmd: { type: 'stop' } }, tooltip: { title: 'Stop' } });
+  buttons.push({ id: 'hold', icon: 'hold', hotkey: 'H', pos: [2, 0], action: { cmd: { type: 'hold' } }, tooltip: { title: 'Hold Position' } });
+  if (hero.type === 'builder') {
+    buttons.push({ id: 'gather', icon: 'gather', hotkey: 'G', pos: [3, 0], active: modeIs('gather'), action: { mode: 'gather' }, tooltip: { title: 'Mine', desc: 'Mine a crystal field. Crystals go straight to your bank.' } });
+    const bpos = { barricade: [0, 1], turret: [1, 1], mender: [2, 1], lanceTurret: [3, 1] };
+    for (const type of SURVIVAL_BUILD_MENU) {
+      const sb = SURVIVAL_BUILDINGS[type];
+      const locked = p.level < sb.unlock;
+      buttons.push({
+        id: `build:${type}`,
+        icon: type,
+        hotkey: sb.hotkey,
+        pos: bpos[type],
+        disabled: locked,
+        dim: !locked && p.crystals < sb.cost,
+        active: modeIs('build', type),
+        action: { mode: 'build', type },
+        tooltip: { title: sb.name, desc: `${sb.description}${locked ? `\nUnlocks at level ${sb.unlock}` : ''}`, cost: { crystals: sb.cost, time: sb.buildTime } },
+      });
+    }
+    const maxed = p.level >= SURVIVAL.maxLevel;
+    const cost = levelCost(p.level);
+    const next = builderStats(Math.min(SURVIVAL.maxLevel, p.level + 1));
+    buttons.push({
+      id: 'levelUp',
+      icon: 'levelUp',
+      hotkey: 'U',
+      pos: [0, 2],
+      disabled: maxed,
+      dim: !maxed && p.crystals < cost,
+      action: { cmd: { type: 'levelUp' } },
+      tooltip: {
+        title: maxed ? 'Max level reached' : `Level Up → ${p.level + 1}`,
+        desc: maxed ? 'You ascended!' : `Mining +2 per trip (${next.yield}/trip), +12 hull, +10 barrier, stronger walls and turrets. Reach level ${SURVIVAL.maxLevel} to win!`,
+        cost: maxed ? null : { crystals: cost },
+      },
+    });
+    const sprintLocked = p.level < SPRINT.unlock;
+    buttons.push({
+      id: 'sprint',
+      icon: 'sprint',
+      hotkey: 'D',
+      pos: [1, 2],
+      disabled: sprintLocked,
+      cooldown: p.sprintCd > 0 ? Math.ceil(p.sprintCd) : null,
+      action: { cmd: { type: 'sprint' } },
+      tooltip: { title: 'Sprint', desc: `Run 60% faster for ${SPRINT.duration} s (${SPRINT.cooldown} s cooldown).${sprintLocked ? `\nUnlocks at level ${SPRINT.unlock}` : ''}` },
+    });
+  } else {
+    buttons.push({ id: 'attack', icon: 'attack', hotkey: 'A', pos: [3, 0], active: modeIs('attack'), action: { mode: 'attack' }, tooltip: { title: 'Attack', desc: 'Attack a target or attack-move.' } });
+    buttons.push({
+      id: 'reveal',
+      icon: 'reveal',
+      hotkey: 'R',
+      pos: [4, 0],
+      cooldown: p.revealCd > 0 ? Math.ceil(p.revealCd) : null,
+      action: { cmd: { type: 'reveal' } },
+      tooltip: { title: 'Reveal Pulse', desc: `Reveals every Shaper for ${SURVIVAL.revealDuration} s (${SURVIVAL.revealCooldown} s cooldown).` },
+    });
+    for (const id of HUNTER_UPGRADE_ORDER) {
+      const u = HUNTER_UPGRADES[id];
+      const lvl = (p.hunterUp && p.hunterUp[id]) || 0;
+      const maxed = lvl >= u.max;
+      const cost = upgradeCost(id, lvl);
+      buttons.push({
+        id: `upgrade:${id}`,
+        icon: `up_${id}`,
+        hotkey: u.hotkey,
+        pos: UPGRADE_POS[id],
+        disabled: maxed,
+        dim: !maxed && p.essence < cost,
+        badge: `${lvl}`,
+        action: { cmd: { type: 'upgrade', upgrade: id } },
+        tooltip: { title: `${u.name} ${maxed ? '(max)' : `${lvl} → ${lvl + 1}`}`, desc: u.description, cost: maxed ? null : { essence: cost } },
+      });
+    }
   }
   return buttons;
 }

@@ -1,9 +1,9 @@
 <div align="center">
 
-# 💎 Shardfall
+# 💎 pvzlite
 
-**A fast 3D real-time strategy game built with three.js.**
-Harvest crystals with hovering *Shaper* drones, raise a crystal Citadel and lead *Lancer* knights into battle against the AI or your friends.
+**Shapers vs Lancers: a 3D survival RTS built with three.js.**
+Run to a crystal field, wall yourself in, build turrets and level up to 11, or play the Hunter: upgrade your blades and armor and smash every fortress open.
 
 [![Build & Release](https://github.com/kajmeter/pvzlite/actions/workflows/release.yml/badge.svg)](https://github.com/kajmeter/pvzlite/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/v/release/kajmeter/pvzlite?label=download&color=2f8cff)](https://github.com/kajmeter/pvzlite/releases/latest)
@@ -11,9 +11,20 @@ Harvest crystals with hovering *Shaper* drones, raise a crystal Citadel and lead
 ![three.js](https://img.shields.io/badge/three.js-r170-black?logo=three.js)
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20Web-informational)
 
-<img src="docs/screenshots/03-base.png" alt="A developed base on Verdant Hollow" width="100%">
+<img src="docs/screenshots/03-fortress.png" alt="A Shaper's walled-in crystal grove with a turret" width="100%">
 
-### ⬇️ [Windows installer](https://github.com/kajmeter/pvzlite/releases/latest/download/Shardfall-Setup.exe) · [Ubuntu/Debian .deb](https://github.com/kajmeter/pvzlite/releases/latest/download/shardfall_amd64.deb) · [Linux AppImage](https://github.com/kajmeter/pvzlite/releases/latest/download/Shardfall-x86_64.AppImage) · [Web build](https://github.com/kajmeter/pvzlite/releases/latest/download/shardfall-web.zip) · [All downloads](https://github.com/kajmeter/pvzlite/releases/latest)
+### ⬇️ [Windows installer](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-Setup.exe) · [Ubuntu/Debian .deb](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite_amd64.deb) · [Linux AppImage](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-x86_64.AppImage) · [Web build](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-web.zip) · [All downloads](https://github.com/kajmeter/pvzlite/releases/latest)
+
+<table>
+<tr>
+<td><img src="docs/screenshots/04-hunter-breach.png" alt="A Hunter breaking through a wall"></td>
+<td><img src="docs/screenshots/01-main-menu.png" alt="Main menu"></td>
+</tr>
+<tr>
+<td align="center"><sub>Hunter breaking a wall</sub></td>
+<td align="center"><sub>Main menu (live AI match in the background)</sub></td>
+</tr>
+</table>
 
 </div>
 
@@ -32,7 +43,11 @@ Harvest crystals with hovering *Shaper* drones, raise a crystal Citadel and lead
    - [3.5 Docker](#35-docker)
    - [3.6 Build from source](#36-build-from-source)
 4. [How to play](#4-how-to-play)
-5. [Units, structures & research](#5-units-structures--research)
+   - [4.1 Playing a Shaper](#41-playing-a-shaper)
+   - [4.2 Playing a Hunter](#42-playing-a-hunter)
+   - [4.3 Controls](#43-controls)
+   - [4.4 Classic RTS mode](#44-classic-rts-mode)
+5. [Stats & numbers](#5-stats--numbers)
 6. [Maps](#6-maps)
 7. [Multiplayer](#7-multiplayer)
 8. [Screenshots](#8-screenshots)
@@ -45,26 +60,25 @@ Harvest crystals with hovering *Shaper* drones, raise a crystal Citadel and lead
 
 ## 1. Overview
 
-Shardfall is a mirror-match RTS that focuses on the core of the genre: a worker economy and shielded melee infantry. Both sides command the **Lumen Concord**:
+pvzlite is an asymmetric **survival** game in the spirit of the classic "probes vs zealots" custom maps:
 
 | | |
 |---|---|
-| 🛸 **Shaper** | A hovering worker drone. It mines crystals and flux and *projects* structures into existence (the structure then builds itself, so the Shaper goes straight back to work). |
-| ⚔️ **Lancer** | A crystal knight with a twin-bladed arc glaive. It strikes **twice per swing**. After **Lunge Drive** it moves 50% faster and dashes into enemies. |
-| 🛡️ **Barriers** | Every unit and structure has a regenerating barrier that absorbs damage before hull. It recharges after 7 s out of combat. |
+| 🛸 **Shapers** (builders) | Hover drones spread across the map. Race to a crystal field, mine it, **wall yourself in** with Barricade Wards, place **turrets** and **level up**. Reach **level 11** or survive until the timer runs out and the Shapers win. |
+| ⚔️ **Lancer Hunters** | Glaive knights locked in a cage in the middle of the map for the first **60 seconds**. Once released, they earn **essence** over time and for every kill, and spend it on **blades, armor, vitality, barrier, speed, sunder and lunge** upgrades. Hunt down every Shaper to win. |
 
-Games are short and intense: expand, out-produce your opponent, then trade armies over beacon towers and ramps.
+Each Shaper has **2 lives**. Hunters respawn when they fall. The longer the game runs, the stronger both sides get: Shapers out-level the Hunters, or the Hunters out-upgrade the walls.
 
-<p align="center"><img src="docs/screenshots/04-battle.png" alt="Lancers clash around a beacon tower" width="100%"></p>
+A full **Classic RTS** mode (economy, tech tree, armies, 1v1/2v2/FFA) is also included.
 
 ## 2. Features
 
-- 🎮 **Full RTS loop**: economy, supply, construction, production queues, tech tree, upgrades, rally points, control groups, fog of war, victory/defeat with end-game stats.
-- 🧠 **Computer opponents** at four difficulties (Easy, Normal, Hard, Brutal). They scout, expand, tech, upgrade, defend and attack.
-- 🌐 **Multiplayer** over LAN or Internet with lobbies, chat, teams, AI slots and a server-authoritative simulation. The server only sends what each player can see, so map hacks don't work.
-- 🗺️ **5 original maps**: 1v1, 2v2 and free-for-all, each in its own biome (snow, lava, jungle, desert, orbital platform).
-- ✨ **three.js graphics**: shadows, bloom, animated procedural models, glaive slashes, barrier flashes, mining beams, warp-in columns, a lava shader and fog of war shading.
-- 🔊 **Procedural audio**: sound effects and ambient music are all synthesized with Web Audio. There are no asset files.
+- 🏰 **Survival mode**: 1-8 Shapers vs 1-2 Hunters, hunter cage and release timer, crystal groves, walls with power fields, turrets, mending wells, lance turrets, 11 builder levels, 7 hunter upgrade tracks, reveal pulse, sprint, lives and respawns.
+- 🧠 **Computer players for both roles** at four difficulties (Easy, Normal, Hard, Brutal). AI Shapers pick a safe grove, plan and seal a wall ring, add defenses and level up. AI Hunters buy upgrades, scout with reveal, path *through* the weakest wall and retreat when hurt.
+- 🌐 **Multiplayer** over LAN or Internet: lobbies, chat, roles, AI slots and a server-authoritative simulation. The server only sends what each player can see, so map hacks don't work.
+- 🗺️ **8 original maps**: 3 survival maps (jungle, snow, lava) and 5 classic RTS maps.
+- ✨ **three.js graphics**: shadows, bloom, animated procedural models, glaive slashes, turret bolts, barrier flashes, mining beams, power fields, a lava shader and fog of war.
+- 🔊 **Procedural audio**: every sound and the music are synthesized with Web Audio. There are no asset files.
 - 💻 **Runs everywhere**: in the browser, as a Windows `.exe`, as an Ubuntu/Debian `.deb`, as an AppImage, as a single-file server binary, or in Docker.
 - ✅ **Tested**: unit, integration and end-to-end tests run in CI on every push, and every push publishes fresh binaries.
 
@@ -76,74 +90,74 @@ Every push to this repository builds and publishes a new release, so these links
 
 | Platform | File | Link |
 |---|---|---|
-| Windows 10/11 (installer) | `Shardfall-Setup.exe` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/Shardfall-Setup.exe) |
-| Windows (portable, no install) | `Shardfall-Portable.exe` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/Shardfall-Portable.exe) |
-| Windows (portable zip) | `Shardfall-win-x64.zip` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/Shardfall-win-x64.zip) |
-| Ubuntu / Debian / Mint / Pop!_OS | `shardfall_amd64.deb` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/shardfall_amd64.deb) |
-| Any Linux distro | `Shardfall-x86_64.AppImage` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/Shardfall-x86_64.AppImage) |
-| Web hosting (static files) | `shardfall-web.zip` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/shardfall-web.zip) |
-| Dedicated server – Linux | `shardfall-server-linux-x64` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/shardfall-server-linux-x64) |
-| Dedicated server – Windows | `shardfall-server-win-x64.exe` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/shardfall-server-win-x64.exe) |
+| Windows 10/11 (installer) | `pvzlite-Setup.exe` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-Setup.exe) |
+| Windows (portable, no install) | `pvzlite-Portable.exe` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-Portable.exe) |
+| Windows (portable zip) | `pvzlite-win-x64.zip` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-win-x64.zip) |
+| Ubuntu / Debian / Mint / Pop!_OS | `pvzlite_amd64.deb` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite_amd64.deb) |
+| Any Linux distro | `pvzlite-x86_64.AppImage` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-x86_64.AppImage) |
+| Web hosting (static files) | `pvzlite-web.zip` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-web.zip) |
+| Dedicated server – Linux | `pvzlite-server-linux-x64` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-server-linux-x64) |
+| Dedicated server – Windows | `pvzlite-server-win-x64.exe` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-server-win-x64.exe) |
 | Checksums | `SHA256SUMS.txt` | [Download](https://github.com/kajmeter/pvzlite/releases/latest/download/SHA256SUMS.txt) |
 
-> **System requirements:** a 64-bit OS and any GPU with WebGL 2 (integrated graphics are fine; lower the quality in *Settings* if needed).
+> **System requirements:** a 64-bit OS and any GPU with WebGL 2. Integrated graphics are fine; lower the quality in *Settings* if needed.
 
 ### 3.1 Windows
 
 **Installer (recommended)**
-1. Download [`Shardfall-Setup.exe`](https://github.com/kajmeter/pvzlite/releases/latest/download/Shardfall-Setup.exe).
+1. Download [`pvzlite-Setup.exe`](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-Setup.exe).
 2. Run it. Windows SmartScreen may say *"Windows protected your PC"* because the build is not code-signed. Click **More info → Run anyway**.
-3. Choose an install folder and finish. Start **Shardfall** from the Start menu or the desktop shortcut.
+3. Choose an install folder and finish. Start **pvzlite** from the Start menu or the desktop shortcut.
 
 **Portable (no installation)**
-- Download [`Shardfall-Portable.exe`](https://github.com/kajmeter/pvzlite/releases/latest/download/Shardfall-Portable.exe) and double-click it. You can also unzip [`Shardfall-win-x64.zip`](https://github.com/kajmeter/pvzlite/releases/latest/download/Shardfall-win-x64.zip) anywhere and run `Shardfall.exe`.
+- Download [`pvzlite-Portable.exe`](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-Portable.exe) and double-click it, or unzip [`pvzlite-win-x64.zip`](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-win-x64.zip) anywhere and run `pvzlite.exe`.
 
-**Uninstall:** *Settings → Apps → Shardfall → Uninstall*.
+**Uninstall:** *Settings → Apps → pvzlite → Uninstall*.
 
 ### 3.2 Ubuntu / Debian / Linux
 
 **.deb package (Ubuntu, Debian, Mint, Pop!_OS, elementary…)**
 ```bash
-wget https://github.com/kajmeter/pvzlite/releases/latest/download/shardfall_amd64.deb
-sudo apt install ./shardfall_amd64.deb      # installs dependencies automatically
-shardfall                                   # or launch "Shardfall" from the app menu
+wget https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite_amd64.deb
+sudo apt install ./pvzlite_amd64.deb      # installs dependencies automatically
+pvzlite                                   # or launch "pvzlite" from the app menu
 ```
-Uninstall with `sudo apt remove shardfall`.
+Uninstall with `sudo apt remove pvzlite`.
 
 **AppImage (Fedora, Arch, openSUSE, any distro)**
 ```bash
-wget https://github.com/kajmeter/pvzlite/releases/latest/download/Shardfall-x86_64.AppImage
-chmod +x Shardfall-x86_64.AppImage
-./Shardfall-x86_64.AppImage
+wget https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-x86_64.AppImage
+chmod +x pvzlite-x86_64.AppImage
+./pvzlite-x86_64.AppImage
 ```
 > On Ubuntu 22.04+ AppImages need FUSE 2: `sudo apt install libfuse2` (24.04+: `libfuse2t64`).
 
-**Headless server mode:** the desktop app can also run as a dedicated server with `shardfall --server --port 7777`. For machines without a desktop, use the [server binary](#34-dedicated-multiplayer-server).
+**Headless server mode:** the desktop app can also run as a dedicated server with `pvzlite --server --port 7777`. For machines without a desktop, use the [server binary](#34-dedicated-multiplayer-server).
 
 ### 3.3 Web Host
 
-Shardfall is a static web app, so any web host can serve it.
+pvzlite is a static web app, so any web host can serve it.
 
-**Option A: static files (single player and AI on any host)**
-1. Download [`shardfall-web.zip`](https://github.com/kajmeter/pvzlite/releases/latest/download/shardfall-web.zip) and unzip it.
-2. Upload the contents of `shardfall-web/` to your host: nginx, Apache, Caddy, GitHub Pages, Netlify, Cloudflare Pages, S3, or an itch.io HTML5 upload.
-3. Open the page. All paths are relative, so sub-folders like `https://example.com/games/shardfall/` work too.
+**Option A: static files (single player vs AI on any host)**
+1. Download [`pvzlite-web.zip`](https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-web.zip) and unzip it.
+2. Upload the contents of `pvzlite-web/` to your host: nginx, Apache, Caddy, GitHub Pages, Netlify, Cloudflare Pages, S3, or an itch.io HTML5 upload.
+3. Open the page. All paths are relative, so sub-folders like `https://example.com/games/pvzlite/` work too.
 
 Quick local test:
 ```bash
-cd shardfall-web && python3 -m http.server 8080    # open http://localhost:8080
+cd pvzlite-web && python3 -m http.server 8080    # open http://localhost:8080
 ```
 
 **Option B: web client and multiplayer from one process**
-The [dedicated server](#34-dedicated-multiplayer-server) serves the web client and the multiplayer endpoint from a single port. Run it and share `http://YOUR_IP:7777`. Browsers that open it can play solo or join lobbies right away.
+The [dedicated server](#34-dedicated-multiplayer-server) serves the web client and the multiplayer endpoint on a single port. Run it and share `http://YOUR_IP:7777`. Anyone who opens it can play solo or join lobbies right away.
 
-**Option C: GitHub Pages (automatic).** This repo ships a Pages workflow. Enable it once in *Settings → Pages → Source: GitHub Actions*, and every push to `main` publishes the game at `https://<user>.github.io/<repo>/`.
+**Option C: GitHub Pages (automatic).** This repo ships a Pages workflow. Enable it once in *Settings → Pages → Source: GitHub Actions*; every push to `main` then publishes the game at `https://<user>.github.io/<repo>/`.
 
 **nginx in front of the server (HTTPS + WebSocket)**
 ```nginx
 server {
   listen 443 ssl;
-  server_name shardfall.example.com;
+  server_name pvzlite.example.com;
   location / {
     proxy_pass http://127.0.0.1:7777;
     proxy_http_version 1.1;
@@ -153,22 +167,22 @@ server {
   }
 }
 ```
-Players then connect to `wss://shardfall.example.com/ws`. The page fills this address in automatically.
+Players then connect to `wss://pvzlite.example.com/ws`. The page fills this address in automatically.
 
 ### 3.4 Dedicated multiplayer server
 
-The server binaries are **single files** with the web client embedded. They don't need Node.js or anything else.
+The server binaries are **single files** with the web client embedded. They need neither Node.js nor anything else.
 
 ```bash
 # Linux
-wget https://github.com/kajmeter/pvzlite/releases/latest/download/shardfall-server-linux-x64
-chmod +x shardfall-server-linux-x64
-./shardfall-server-linux-x64 --port 7777
+wget https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-server-linux-x64
+chmod +x pvzlite-server-linux-x64
+./pvzlite-server-linux-x64 --port 7777
 ```
 ```powershell
 # Windows (PowerShell)
-Invoke-WebRequest https://github.com/kajmeter/pvzlite/releases/latest/download/shardfall-server-win-x64.exe -OutFile shardfall-server.exe
-.\shardfall-server.exe --port 7777
+Invoke-WebRequest https://github.com/kajmeter/pvzlite/releases/latest/download/pvzlite-server-win-x64.exe -OutFile pvzlite-server.exe
+.\pvzlite-server.exe --port 7777
 ```
 
 | Option | Default | Description |
@@ -183,13 +197,13 @@ Open TCP port **7777** in your firewall or router for Internet play.
 
 **Run it as a systemd service (Linux)**
 ```ini
-# /etc/systemd/system/shardfall.service
+# /etc/systemd/system/pvzlite.service
 [Unit]
-Description=Shardfall game server
+Description=pvzlite game server
 After=network.target
 
 [Service]
-ExecStart=/opt/shardfall/shardfall-server-linux-x64 --port 7777
+ExecStart=/opt/pvzlite/pvzlite-server-linux-x64 --port 7777
 Restart=always
 User=nobody
 
@@ -197,13 +211,13 @@ User=nobody
 WantedBy=multi-user.target
 ```
 ```bash
-sudo systemctl enable --now shardfall
+sudo systemctl enable --now pvzlite
 ```
 
 ### 3.5 Docker
 
 ```bash
-docker run -d --name shardfall -p 7777:7777 --restart unless-stopped ghcr.io/kajmeter/pvzlite:latest
+docker run -d --name pvzlite -p 7777:7777 --restart unless-stopped ghcr.io/kajmeter/pvzlite:latest
 # or build it yourself
 docker compose up -d --build
 ```
@@ -228,24 +242,76 @@ npm start              # production build + game server → http://localhost:777
 | `npm run dist:win` | Windows installer + portable exe (run on Windows) |
 | `npm run dist:linux` | `.deb` + AppImage |
 | `npm run dist:server` | Single-file server binaries for Linux and Windows |
-| `npm run dist:web` | `release/shardfall-web.zip` |
+| `npm run dist:web` | `release/pvzlite-web.zip` |
 | `npm test` | Unit and integration tests (Vitest) |
 | `npm run test:e2e` | End-to-end browser tests (Playwright) |
 | `npm run screenshots` | Regenerate the README screenshots |
 
 ## 4. How to play
 
-**Goal:** destroy every enemy structure. You lose when all of yours are gone.
+Start with **Play pvzlite** in the main menu. Pick a map, choose your side, set how many AI Shapers and Hunters join, and press **Start Game**.
 
-### 4.1 Your first minutes
-1. Your 12 Shapers start mining automatically. Click the **Citadel** and press **E** to train more. Keep it busy.
-2. Select a Shaper, press **B**, then **E** to place a **Conduit** before you hit supply 15/15. Conduits add +8 supply and *power* nearby structures.
-3. Build a **Portal** (**B → G**) inside a Conduit's blue power field, then train **Lancers** with **Z**.
-4. Build a **Siphon** (**B → A**) on a green flux vent and send three Shapers to it. Flux pays for technology.
-5. Get an **Archive** (Phase Transit), a **Sanctum** (Lunge Drive) and a **Foundry** (upgrades). Take a second Citadel at a new crystal field.
-6. Gather your Lancers, press **A** and click the enemy base.
+<img src="docs/screenshots/02-survival-setup.png" alt="Survival setup: map, side, players and rules" width="100%">
 
-### 4.2 Controls
+**How a round goes**
+1. **0:00 – 1:00 · Grace period.** The Hunters are locked in the cage in the middle of the map. Shapers run to a crystal grove.
+2. **1:00 · Release.** The cage opens and the Hunters spread out.
+3. **The hunt.** Shapers mine, wall in and level up. Hunters upgrade and break walls.
+4. **The end.** Shapers win when **any Shaper reaches level 11** or **the timer runs out** (15 min by default). Hunters win when **every Shaper is out of lives**.
+
+### 4.1 Playing a Shaper
+
+<img src="docs/screenshots/05-mining.png" alt="A Shaper mining inside its walls" width="100%">
+
+1. **Run to a grove.** Pick crystal fields away from the cage. Right-click a field (or press **G** and click it) to mine. Crystals go **straight into your bank**; there's no carrying back.
+2. **Wall in fast.** Press **W** to place **Barricade Wards** (15 crystals, 2×2). Close every gap: Hunters can't squeeze between touching wards. Use cliffs, lava and map edges as free walls.
+3. **Add turrets.** **T** places a **Spire Turret** (90). Turrets need a Barricade Ward within 4.5 cells, shown as a blue power field while you place them.
+4. **Level up.** Press **U** to spend crystals on your next level. Each level gives more crystals per trip, more hull and barrier, armor every 3 levels, and stronger walls and turrets *built after* the level-up. Level 3 unlocks the **Mending Well** (R), level 5 the **Lance Turret** (L), level 2 **Sprint** (D).
+5. **Run when it breaks.** If a Hunter breaks in, sprint out and rebuild elsewhere. You have 2 lives and respawn after 15 s at the safest spot. Killing a Hunter pays +100 crystals.
+
+<img src="docs/screenshots/06-turret-placement.png" alt="Placing a turret inside a wall's power field" width="100%">
+
+### 4.2 Playing a Hunter
+
+<img src="docs/screenshots/04-hunter-breach.png" alt="A Hunter smashing a wall" width="100%">
+
+1. **Shop in the cage.** You start with 100 essence and earn 4/s. Upgrades: **Q** blades, **W** armor, **E** vitality, **Z** barrier, **X** swiftness, **C** sunder, **V** lunge. Upgrade costs rise with each level.
+2. **Scout.** After the release, check the groves. **R** fires a **Reveal Pulse**: every Shaper is shown on your map for 5 s (40 s cooldown).
+3. **Break in.** Right-click a wall to attack it. **Sunder** gives +30% damage against structures per level. Killing structures pays essence (turrets pay the most).
+4. **Kill Shapers.** Each kill pays 150 + 25 × the Shaper's level. Your **lunge** dashes into enemies within range and hits hard.
+5. **Don't stand in turret fire.** Your barrier recharges out of combat. If you die, you respawn at the cage after 12 s and keep your upgrades.
+
+### 4.3 Controls
+
+| Input | Shaper | Hunter |
+|---|---|---|
+| Right click | Move / mine a crystal field | Move / attack |
+| **G** | Mine (then click a field) | – |
+| **W · T · R · L** | Barricade · Turret · Mending Well · Lance Turret | – |
+| **U** | Level up | – |
+| **D** | Sprint (level 2+) | – |
+| **Q W E Z X C V** | – | Blades · Armor · Vitality · Barrier · Swiftness · Sunder · Lunge |
+| **R** | – | Reveal Pulse |
+| **A** | – | Attack-move |
+| **M · S · H** | Move · Stop · Hold | Move · Stop · Hold |
+
+| General | |
+|---|---|
+| **F1** / **F2** | Select your hero (double tap centers the camera) |
+| **Tab** | Scoreboard |
+| Arrows, screen edges, middle-drag, wheel | Pan and zoom the camera |
+| **Esc** / **F10** | Cancel / game menu |
+| **+** / **-** | Game speed (single player) |
+| **Enter** | Chat (multiplayer) |
+
+### 4.4 Classic RTS mode
+
+**Classic RTS** in the main menu is a full mirror-match RTS on 5 maps against up to 3 AIs: mine crystals and flux with Shapers, build Conduits (supply + power), Portals, a Foundry, Archive and Sanctum, research upgrades and Lunge Drive, warp in Lancers and destroy every enemy structure.
+
+<img src="docs/screenshots/11-classic-base.png" alt="Classic RTS base" width="100%">
+
+<details>
+<summary><b>Classic controls & mechanics</b></summary>
 
 | Input | Action |
 |---|---|
@@ -256,66 +322,70 @@ npm start              # production build + game server → http://localhost:777
 | **E** / **Z** | Train Shaper / Lancer (**Shift** queues 5) |
 | **Z** (Phase Portal) | Warp a Lancer into any power field |
 | **C** (Citadel) | Overclock a structure (+50% speed for 20 s) |
-| **R** | Set rally point (rally on crystals to auto-mine) |
-| **Ctrl + 1-9** / **Shift + 1-9** / **1-9** | Set / add to / recall control group (double tap centers the camera) |
-| **F1** / **Ctrl+F1** / **F2** | Next idle Shaper / all idle Shapers / select army |
-| **Backspace** / **Space** | Cycle Citadels / jump to the last alert |
-| Arrows, screen edges, middle-drag, wheel | Pan and zoom the camera |
-| **Esc** / **F10** | Cancel / game menu |
-| **+** / **-** | Game speed (single player) |
-| **Enter** | Chat |
+| **R** | Set rally point |
+| **Ctrl + 1-9** / **1-9** | Set / recall control group |
+| **F1** / **F2** | Idle Shaper / select army |
 
-### 4.3 Mechanics cheat sheet
-- **Mining:** 5 crystals per trip, about 2.8 s at the field. One Shaper mines a field at a time; extra Shapers wait or bounce to a free field. 2 per field is efficient, 3 is the maximum.
-- **Flux:** 4 per trip from a Siphon, 3 Shapers per Siphon.
-- **Supply:** Citadel +15, Conduit +8, cap 200. Production pauses when you're supply-blocked.
-- **Power:** Portal, Foundry, Archive, Sanctum and Aegis Well need a Conduit within 6.5 cells. Unpowered structures stop working.
-- **Damage:** a hit drains barrier first (reduced by Barrier Lattice upgrades). Leftover damage hits hull, reduced by armor. Every hit does at least 0.5 damage.
-- **Barrier regeneration:** 2.8/s after 7 s without taking damage.
-- **High ground:** units can't see uphill. Hold the **Beacon Towers** (stand next to them) for wide vision.
-- **Warp-in:** Phase Portals warp a Lancer in 3.6 s near a Citadel or Phase Portal, or 16 s at a distant Conduit. The portal then has a 20 s cooldown.
-- **Rubble:** collapsed rubble blocks some paths on Quartz Quarry. Attack it to open the way.
+- **Mining:** 5 crystals per trip. 2 Shapers per field is efficient, 3 is the maximum. **Flux:** 4 per trip from a Siphon.
+- **Supply:** Citadel +15, Conduit +8, cap 200. **Power:** most structures need a Conduit within 6.5 cells.
+- **Damage:** barrier first, then hull minus armor. Barriers regenerate 2.8/s after 7 s without damage.
+- **High ground:** units can't see uphill. Stand next to **Beacon Towers** for wide vision.
 
-## 5. Units, structures & research
-
-### Units
-| Unit | Cost | Supply | Build | Hull / Barrier | Armor | Attack | Speed | Sight |
-|---|---|---|---|---|---|---|---|---|
-| **Shaper** | 50 | 1 | 12 s | 20 / 20 | 0 | 5 (1.07 s) | 3.94 | 8 |
-| **Lancer** | 100 | 2 | 27 s | 100 / 50 | 1 | 8 × 2 (0.86 s) | 3.15 → 4.73 with Lunge Drive | 9 |
-
-**Lunge:** with Lunge Drive, a Lancer within 4 cells of its target dashes at 8.5 speed. Cooldown is 7 s, and the first strike deals +8 damage. It is autocast and you can toggle it with **X**.
-
-### Structures
-| Structure | Cost | Build | Hull / Barrier | Size | Needs | Purpose |
+| Unit | Cost | Supply | Hull / Barrier | Armor | Attack | Speed |
 |---|---|---|---|---|---|---|
-| **Citadel** | 400 | 71 s | 1000 / 1000 | 5×5 | – | Trains Shapers, resource drop-off, +15 supply, Overclock |
-| **Conduit** | 100 | 18 s | 200 / 200 | 2×2 | – | +8 supply, power field |
-| **Siphon** | 75 | 21 s | 300 / 300 | 3×3 | flux vent | Flux harvesting |
-| **Portal** | 150 | 46 s | 500 / 500 | 3×3 | Citadel, power | Trains Lancers / becomes Phase Portal |
-| **Foundry** | 150 | 32 s | 400 / 400 | 3×3 | Citadel, power | Weapon, armor and barrier upgrades |
-| **Archive** | 150 | 36 s | 550 / 550 | 3×3 | Portal, power | Phase Transit; unlocks Sanctum and Aegis Well |
-| **Sanctum** | 150 / 100 flux | 36 s | 500 / 500 | 3×3 | Archive, power | Lunge Drive; unlocks level 2-3 upgrades |
-| **Aegis Well** | 100 | 29 s | 150 / 150 | 2×2 | Archive, power | Restores barriers of nearby allies (energy) |
+| **Shaper** | 50 | 1 | 20 / 20 | 0 | 5 | 3.94 |
+| **Lancer** | 100 | 2 | 100 / 50 | 1 | 8 × 2 | 3.15 → 4.73 with Lunge Drive |
 
-### Research
-| Research | Where | Cost (crystals/flux) | Time | Effect |
+</details>
+
+## 5. Stats & numbers
+
+**Shaper levels** (crystals for the *next* level)
+
+| Level | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Cost to reach next | 110 | 190 | 290 | 410 | 550 | 720 | 900 | 1110 | 1340 | 1600 | 🏆 win |
+| Crystals per trip | 8 | 10 | 12 | 14 | 16 | 18 | 20 | 22 | 24 | 26 | 28 |
+| Hull / Barrier | 45/40 | 57/50 | 69/60 | 81/70 | 93/80 | 105/90 | 117/100 | 129/110 | 141/120 | 153/130 | 165/140 |
+| Armor | 0 | 0 | 0 | 1 | 1 | 1 | 2 | 2 | 2 | 3 | 3 |
+
+**Shaper structures** (all 2×2; stats use your level when placed)
+
+| Structure | Key | Cost | Build | Unlock | Hull | Notes |
+|---|---|---|---|---|---|---|
+| **Barricade Ward** | W | 15 | 3 s | – | 300 + 50/level, armor 2 + 1 per 3 levels | Wall block, projects a 4.5 power field |
+| **Spire Turret** | T | 90 | 8 s | – | 180 + 20/level, 100 barrier | 9 + 2.5/level damage, range 7, 1 shot/s. Needs power |
+| **Mending Well** | R | 100 | 10 s | Lv 3 | 160, 160 barrier | Restores barriers within 5.5. Needs power |
+| **Lance Turret** | L | 175 | 12 s | Lv 5 | 240 + 25/level, 120 barrier | 32 + 6/level damage, range 9.5, 1 shot / 2.2 s. Needs power |
+
+**Hunter** (base: 220 hull, 100 barrier, 1 armor, 12 × 2 damage, speed 3.7, lunge range 4 / cooldown 9 s)
+
+| Upgrade | Key | Per level | Max | Cost (level n → n+1) |
 |---|---|---|---|---|
-| Phase Transit | Archive | 50/50 | 100 s | Portals become Phase Portals (warp-in) |
-| Lunge Drive | Sanctum | 100/100 | 100 s | Lancer speed +50% and dash |
-| Arc Weapons 1-3 | Foundry | 100/100 · 150/150 · 200/200 | 129-179 s | +1 Lancer damage per strike per level |
-| Plating 1-3 | Foundry | 100/100 · 150/150 · 200/200 | 129-179 s | +1 unit armor per level |
-| Barrier Lattice 1-3 | Foundry | 150/150 · 225/225 · 300/300 | 129-179 s | +1 barrier armor per level (units and structures) |
+| Sharpened Blades | Q | +3 damage per strike | 10 | 90 + 45n |
+| Heavy Armor | W | +1 armor | 10 | 90 + 45n |
+| Vitality | E | +60 hull | 10 | 80 + 40n |
+| Barrier Core | Z | +40 barrier, faster recharge | 8 | 100 + 50n |
+| Swiftness | X | +0.15 speed | 6 | 120 + 60n |
+| Sunder | C | +30% damage vs structures | 6 | 100 + 60n |
+| Lunge Mastery | V | −1 s cooldown, +1 range | 5 | 150 + 75n |
+
+**Essence:** 100 at start, +4/s, +150 + 25 × level per Shaper kill, +6 per ward, +40 per turret or well, +60 per lance turret.
 
 ## 6. Maps
 
-| | Map | Players | Size | Theme |
+| | Map | Mode | Size | Description |
 |---|---|---|---|---|
-| <img src="docs/screenshots/maps/frostgate.png" width="110"> | **Frostgate Ruins** | 2 | 128×128 | Frozen highland fortresses: high-ground main, mid-ground natural, central beacon hill |
-| <img src="docs/screenshots/maps/ember.png" width="110"> | **Ember Crossing** | 2 | 112×112 | A molten rift splits the map. Fight over the passages and the beacon plateau |
-| <img src="docs/screenshots/maps/verdant.png" width="110"> | **Verdant Hollow** | 2 | 136×136 | Jungle temple terraces with many expansions, two flanking beacons and rich crystal fields |
-| <img src="docs/screenshots/maps/quarry.png" width="110"> | **Quartz Quarry** | 4 | 152×152 | Four sandstone fortresses with naturals, rubble-blocked paths and a central beacon |
-| <img src="docs/screenshots/maps/proving.png" width="110"> | **Proving Grounds** | 2 | 96×96 | A compact orbital platform for quick games |
+| <img src="docs/screenshots/maps/wilds.png" width="110"> | **Crystal Wilds** | Survival | 128×128 | Jungle clearings full of crystal groves. Four highland terraces with narrow ramps are perfect for walling in |
+| <img src="docs/screenshots/maps/expanse.png" width="110"> | **Frozen Expanse** | Survival | 120×120 | Wide snowfields between two glacier plateaus. The high shelves hide rich crystals behind single ramps |
+| <img src="docs/screenshots/maps/labyrinth.png" width="110"> | **Molten Labyrinth** | Survival | 112×112 | Lava rivers carve the land into pockets. Few entrances, many dead ends: wall the gaps and survive |
+| <img src="docs/screenshots/maps/frostgate.png" width="110"> | **Frostgate Ruins** | Classic · 2p | 128×128 | Frozen highland fortresses with a high-ground main, a natural and a central beacon hill |
+| <img src="docs/screenshots/maps/ember.png" width="110"> | **Ember Crossing** | Classic · 2p | 112×112 | A molten rift splits the map. Fight over the passages and the beacon plateau |
+| <img src="docs/screenshots/maps/verdant.png" width="110"> | **Verdant Hollow** | Classic · 2p | 136×136 | Jungle temple terraces with many expansions and rich crystal fields |
+| <img src="docs/screenshots/maps/quarry.png" width="110"> | **Quartz Quarry** | Classic · 4p | 152×152 | Four sandstone fortresses with rubble-blocked paths and a central beacon |
+| <img src="docs/screenshots/maps/proving.png" width="110"> | **Proving Grounds** | Classic · 2p | 96×96 | A compact orbital platform for quick games |
+
+Classic maps can also be played in survival mode: Shapers then start at the player bases.
 
 ## 7. Multiplayer
 
@@ -323,50 +393,54 @@ npm start              # production build + game server → http://localhost:777
 
 **Host from the desktop app (LAN):** *Multiplayer → Host LAN server on port 7777*. The app shows your LAN address (e.g. `ws://192.168.1.20:7777`). Friends enter it under *Server address* and connect.
 
-**Host a dedicated server:** run the [server binary](#34-dedicated-multiplayer-server) or [Docker image](#35-docker). People can open `http://SERVER_IP:7777` in a browser and play right away, or connect from the desktop app.
+**Host a dedicated server:** run the [server binary](#34-dedicated-multiplayer-server) or the [Docker image](#35-docker). People can open `http://SERVER_IP:7777` in a browser and play right away, or connect from the desktop app.
 
-**In the lobby:** create a game, pick a map, add AI players, set teams and colors, chat. The host starts the game once everyone is ready. Leaving a running game counts as surrendering.
+**In the lobby:** create a game, pick the mode (survival or classic) and a map, add AI players, choose who plays **Shaper** or **Hunter** (or teams in classic), set colors and chat. The host starts the game once everyone is ready. Up to 10 players per survival room.
 
-The server runs the simulation at 20 ticks/s, validates every command, and streams 10 Hz snapshots filtered by each player's fog of war. Clients interpolate between snapshots.
+The server runs the simulation at 20 ticks/s, validates every command and streams 10 Hz snapshots filtered by each player's fog of war. Clients interpolate between snapshots.
 
 ## 8. Screenshots
 
 | | |
 |---|---|
-| <img src="docs/screenshots/01-main-menu.png" alt="Main menu with a live AI battle in the background"> Main menu with a live AI battle behind it | <img src="docs/screenshots/02-skirmish-setup.png" alt="Skirmish setup"> Skirmish setup: maps, AI difficulty, teams |
-| <img src="docs/screenshots/05-economy.png" alt="Shapers mining crystals"> Shapers harvesting crystals | <img src="docs/screenshots/06-build-placement.png" alt="Placing a Portal inside a power field"> Placing a Portal inside a Conduit's power field |
-| <img src="docs/screenshots/08-four-player-map.png" alt="2v2 on Quartz Quarry"> 2v2 on Quartz Quarry | <img src="docs/screenshots/10-victory.png" alt="Victory screen"> Victory screen with match statistics |
-| <img src="docs/screenshots/09-how-to-play.png" alt="In-game help"> Built-in *How to Play* | <img src="docs/screenshots/04-battle.png" alt="Lancer battle"> Lancers clash at a beacon |
+| <img src="docs/screenshots/03-fortress.png" alt="Fortress"> | <img src="docs/screenshots/04-hunter-breach.png" alt="Hunter breach"> |
+| A level-3 Shaper's walled grove with a Spire Turret | A Hunter with 11 upgrades breaking through the walls |
+| <img src="docs/screenshots/05-mining.png" alt="Mining"> | <img src="docs/screenshots/06-turret-placement.png" alt="Turret placement"> |
+| Mining inside fresh walls on Molten Labyrinth | Placing a turret inside the walls' power field |
+| <img src="docs/screenshots/10-victory.png" alt="Victory"> | <img src="docs/screenshots/09-how-to-play.png" alt="How to play"> |
+| Ascension: a Shaper reaches level 11 | The in-game guide |
+| <img src="docs/screenshots/11-classic-base.png" alt="Classic base"> | <img src="docs/screenshots/12-classic-battle.png" alt="Classic battle"> |
+| Classic RTS: a developed base | Classic RTS: Lancers clash |
 
 ## 9. Development
 
 ```
 pvzlite/
 ├─ src/shared/          # deterministic simulation shared by client + server
-│  ├─ data/defs.js      #   unit, structure and research data
-│  ├─ maps/             #   map generator + 5 map descriptions
-│  ├─ sim/              #   world, pathfinding (A*), movement, combat, economy, vision
-│  ├─ ai/ai.js          #   computer opponent (4 difficulties)
+│  ├─ data/             #   unit/structure data (defs.js) and survival rules (survival.js)
+│  ├─ maps/             #   map generator + 8 map descriptions
+│  ├─ sim/              #   world, survival rules, pathfinding (A*), movement, combat, vision
+│  ├─ ai/               #   classic AI and survival AI (Shaper + Hunter), 4 difficulties
 │  └─ net/protocol.js   #   snapshot protocol (fog-filtered)
 ├─ src/client/          # three.js client
 │  ├─ render/           #   terrain, instanced unit rigs, structures, effects, fog shader
 │  ├─ ui/               #   HUD, minimap, menus, icons
 │  ├─ input/            #   RTS camera + controls
-│  ├─ game/             #   local session, command card, game loop
+│  ├─ game/             #   local session, command cards, game loop
 │  ├─ net/              #   WebSocket client + remote session
 │  └─ audio/            #   procedural Web Audio
 ├─ server/              # Node.js HTTP + WebSocket server (lobbies, rooms)
 ├─ desktop/             # Electron shell (Windows/Linux apps)
 ├─ scripts/             # icons, server binaries (Node SEA), web zip, screenshots
-├─ tests/               # Vitest: simulation, maps, server
-├─ e2e/                 # Playwright: menus, gameplay, multiplayer
+├─ tests/               # Vitest: simulation, survival, maps, server
+├─ e2e/                 # Playwright: menus, survival as Shaper/Hunter, classic, multiplayer
 └─ .github/workflows/   # CI, release-on-every-push, GitHub Pages
 ```
 
 - **One simulation, everywhere:** the same `World` runs in the browser for single player and on the server for multiplayer. It is deterministic for a given seed, which the tests check.
 - **Rendering:** units are instanced rigs (one `InstancedMesh` per body part) animated procedurally, so hundreds of units cost about a dozen draw calls. Fog of war is a data texture sampled in every material's shader.
-- **Tests:** `npm test` runs 50+ unit and integration tests (combat math, mining, production, research, abilities, pathfinding, map validity, AI, determinism, lobby and snapshot protocol). `npm run test:e2e` plays the game in Chromium.
-- **Debug API:** in the browser console, `__shardfall.debug` can `autoplay()`, `run(ticks)`, `spawn()`, `reveal()` and more.
+- **Tests:** `npm test` runs 70+ unit and integration tests (survival rules, levels, walls and power, turrets, upgrades, respawns, win conditions, combat math, pathfinding, map validity, AI games, determinism, lobbies and the snapshot protocol). `npm run test:e2e` plays the game in Chromium as a Shaper, as a Hunter, in classic mode and in multiplayer.
+- **Debug API:** in the browser console, `__pvzlite.debug` can `autoplay()`, `run(ticks)`, `spawn()`, `give()`, `reveal()` and more. Quick-start URLs: `?survive=wilds&role=hunter&ai=hard`, `?play=frostgate&ai=brutal`.
 
 ## 10. Releases & automatic builds
 
@@ -387,11 +461,12 @@ The [`Build & Release`](.github/workflows/release.yml) workflow runs on **every 
 | AppImage won't start | `sudo apt install libfuse2` (or `libfuse2t64`) and `chmod +x` the file. |
 | Can't connect to a server | Check the address (`ws://IP:7777/ws`), the firewall or port forwarding for TCP 7777, and use `wss://` when the page is served over HTTPS. |
 | No sound | Click once inside the game window. Browsers only start audio after user interaction. |
+| "Can't build there" | Survival structures need open, buildable ground, can't go next to the cage, and turrets/wells need a Barricade Ward within 4.5 cells. |
 
 ## 12. License & credits
 
 Code is released under the [Apache License 2.0](LICENSE).
 
-Shardfall is an **original** game: all units, structures, names, maps, 3D models, icons, sounds and music were created procedurally for this project. It is inspired by the mechanics of classic real-time strategy games (worker economies, regenerating shields, melee charges), but it is not affiliated with, endorsed by, or using assets from any commercial RTS or its publisher.
+pvzlite is an **original** game. Its units, structures, names, maps, 3D models, icons, sounds and music were all created procedurally for this project. The survival mode is inspired by the community-made "probes vs zealots" custom games and by classic real-time strategy mechanics (worker economies, regenerating shields, melee charges). pvzlite is not affiliated with or endorsed by any commercial RTS or its publisher, and uses none of their assets.
 
 Built with [three.js](https://threejs.org), [ws](https://github.com/websockets/ws), [Vite](https://vitejs.dev), [Electron](https://www.electronjs.org), [Vitest](https://vitest.dev) and [Playwright](https://playwright.dev).

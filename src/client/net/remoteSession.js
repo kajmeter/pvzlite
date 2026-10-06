@@ -4,6 +4,7 @@ import { World } from '../../shared/sim/world.js';
 import { PathGrid } from '../../shared/sim/pathgrid.js';
 import { UNITS, BUILDINGS, RESEARCH } from '../../shared/data/defs.js';
 import { PLAYER_COLORS, POWER_RADIUS, RESOURCE_EXCLUSION } from '../../shared/constants.js';
+import { SURVIVAL_BUILDINGS } from '../../shared/data/survival.js';
 import { TYPE_NAME, SNAPSHOT_INTERVAL, unrle } from '../../shared/net/protocol.js';
 import { rectDist } from '../../shared/sim/geom.js';
 
@@ -12,8 +13,10 @@ export class RemoteSession {
     this.net = net;
     this.isLocal = false;
     this.localPlayer = start.localPlayer;
+    this.mode = start.mode === 'survival' ? 'survival' : 'classic';
+    this.survival = null;
     // Build the static part of the world locally: same map + creation order => same entity ids
-    const shadow = new World({ mapId: start.mapId, players: start.players.map((p) => ({ ...p, type: 'human' })), seed: start.seed, startCrystals: start.startCrystals });
+    const shadow = new World({ mapId: start.mapId, mode: this.mode, players: start.players.map((p) => ({ ...p, type: 'human' })), seed: start.seed, startCrystals: start.startCrystals });
     this.map = shadow.map;
     this.grid = new PathGrid(this.map);
     this.players = start.players.map((p, i) => ({
@@ -23,6 +26,12 @@ export class RemoteSession {
       color: p.color,
       colorHex: PLAYER_COLORS[p.color % PLAYER_COLORS.length].hex,
       type: p.type,
+      role: p.role || 'builder',
+      level: 1,
+      lives: 0,
+      essence: 0,
+      heroId: 0,
+      hunterUp: {},
       crystals: 0,
       flux: 0,
       supplyUsed: 0,
@@ -112,9 +121,21 @@ export class RemoteSession {
       v.hidden = !!hidden;
       v.warping = warping;
       v.warpTotal = warpTotal;
-      if (row.length > 15) {
-        v.idle = row[15] === 1;
-        v.autocast.lunge = row[16] === 1;
+      if (row[15]) {
+        v.idle = row[15][0] === 1;
+        v.autocast.lunge = row[15][1] === 1;
+      }
+      if (row[16]) {
+        const [mh, mb, ar, sp, dm, sb, my, caged, sprint] = row[16];
+        v.maxHp = mh;
+        v.maxBarrier = mb;
+        v.armor = ar;
+        v.speedOverride = sp;
+        v.damage = dm;
+        v.structureBonus = sb;
+        v.mineYield = my;
+        v.caged = !!caged;
+        v.sprinting = !!sprint;
       }
       seen.add(id);
       units.push(v);
@@ -137,13 +158,23 @@ export class RemoteSession {
       v.powered = !!powered;
       v.beam = beam;
       v.overclock = overclock;
-      if (row.length > 13) {
-        v.energy = row[13];
-        v.warpCd = row[14];
-        v.transform = row[15];
-        v.queue = row[16].map(([k, qid, prog, time, level]) => ({ kind: k === 0 ? 'unit' : 'research', id: qid, progress: prog, time, level }));
-        v.rally = row[17] ? { x: row[17][0], y: row[17][1], target: row[17][2] } : null;
-        v.ventAmount = row[18] >= 0 ? row[18] : undefined;
+      if (row[13]) {
+        const o = row[13];
+        v.energy = o[0];
+        v.warpCd = o[1];
+        v.transform = o[2];
+        v.queue = o[3].map(([k, qid, prog, time, level]) => ({ kind: k === 0 ? 'unit' : 'research', id: qid, progress: prog, time, level }));
+        v.rally = o[4] ? { x: o[4][0], y: o[4][1], target: o[4][2] } : null;
+        v.ventAmount = o[5] >= 0 ? o[5] : undefined;
+      }
+      if (row[14]) {
+        const [mh, mb, level, aim, wd, wr] = row[14];
+        v.maxHp = mh;
+        v.maxBarrier = mb;
+        v.level = level;
+        v.aim = aim;
+        v.weaponDamage = wd;
+        v.weaponRange = wr;
       }
       seen.add(id);
       buildings.push(v);
@@ -172,6 +203,7 @@ export class RemoteSession {
       Object.assign(p, pl);
     }
     if (m.vision) unrle(m.vision, this.vis, this.exp);
+    if (m.survival) this.survival = m.survival;
     for (const ev of m.events) {
       if (ev.e === 'death' && (ev.kind === 'resource' || ev.kind === 'neutral')) {
         this.ents.delete(ev.id);
@@ -184,6 +216,7 @@ export class RemoteSession {
       this.over = true;
       this.winnerTeam = m.winnerTeam;
       if (m.stats) this.finalStats = m.stats;
+      if (m.reason) this.overReason = m.reason;
     }
     this.snapTime = now;
     this.lastSnapAt = now;
@@ -222,8 +255,23 @@ export class RemoteSession {
     return this.players[this.localPlayer];
   }
 
-  startLocation() {
+  survivalInfo() {
+    return this.survival;
+  }
+
+  hero() {
     const p = this.players[this.localPlayer];
+    return p && p.heroId ? this.ents.get(p.heroId) || null : null;
+  }
+
+  startLocation() {
+    const h = this.hero();
+    if (h) return { x: h.x, y: h.y };
+    const p = this.players[this.localPlayer];
+    if (this.mode === 'survival' && p) {
+      const sp = p.role === 'hunter' ? this.map.cage : this.map.builderSpawns[0];
+      if (sp) return { x: sp.x, y: sp.y };
+    }
     const b = p && this.map.bases[p.startBase];
     return b ? { x: b.x, y: b.y } : { x: this.map.width / 2, y: this.map.height / 2 };
   }
@@ -304,6 +352,7 @@ export class RemoteSession {
   }
 
   canPlace(type, bx, by) {
+    if (this.mode === 'survival') return this.canPlaceSurvival(type, bx, by);
     const def = BUILDINGS[type];
     for (const req of def.requires) if (!this.hasCompleted(req)) return { ok: false, reason: `Requires ${BUILDINGS[req].name}` };
     const s = def.size;
@@ -319,6 +368,25 @@ export class RemoteSession {
       for (const r of this._resources) if (rectDist(bx, by, s, s, r.bx, r.by, r.w, r.h) < RESOURCE_EXCLUSION) return { ok: false, reason: 'Too close to resources' };
     }
     if (def.needsPower && !this.isPoweredAt(bx + s / 2, by + s / 2)) return { ok: false, reason: 'Must be placed in a power field' };
+    return { ok: true };
+  }
+
+  canPlaceSurvival(type, bx, by) {
+    const sb = SURVIVAL_BUILDINGS[type];
+    const p = this.player();
+    if (!sb || !p) return { ok: false, reason: 'Unknown structure' };
+    if (p.role !== 'builder') return { ok: false, reason: 'Only Shapers can build' };
+    if ((p.level || 1) < sb.unlock) return { ok: false, reason: `Unlocks at level ${sb.unlock}` };
+    for (let y = by; y < by + 2; y++) for (let x = bx; x < bx + 2; x++) if (!this.grid.buildable(x, y)) return { ok: false, reason: "Can't build there" };
+    const cx = bx + 1;
+    const cy = by + 1;
+    const cage = this.map.cage;
+    const cr = this.map.cageRadius + 2;
+    if (Math.abs(cx - cage.x) < cr + 1 && Math.abs(cy - cage.y) < cr + 1) return { ok: false, reason: 'Too close to the Hunter cage' };
+    if (!this.isExplored(cx, cy)) return { ok: false, reason: 'Location not explored' };
+    if (sb.needsPower && !this._buildings.some((b) => b.owner === this.localPlayer && b.type === 'barricade' && b.built && Math.hypot(b.x - cx, b.y - cy) <= SURVIVAL_BUILDINGS.barricade.powerRadius)) {
+      return { ok: false, reason: 'Needs a Barricade Ward nearby (power)' };
+    }
     return { ok: true };
   }
 
@@ -346,7 +414,7 @@ export class RemoteSession {
 
   stats() {
     if (this.finalStats) return this.finalStats;
-    return this.players.map((p) => ({ id: p.id, name: p.name, team: p.team, colorHex: p.colorHex, crystalsMined: 0, fluxMined: 0, unitsMade: 0, kills: 0, unitsLost: 0, structuresBuilt: 0, structuresKilled: 0 }));
+    return this.players.map((p) => ({ id: p.id, name: p.name, team: p.team, colorHex: p.colorHex, role: p.role, level: p.level, lives: p.lives, deaths: p.deaths, hunterUp: p.hunterUp, crystalsMined: 0, fluxMined: 0, unitsMade: 0, kills: 0, unitsLost: 0, structuresBuilt: 0, structuresKilled: 0 }));
   }
 
   leave() {

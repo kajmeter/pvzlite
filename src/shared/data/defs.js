@@ -1,5 +1,5 @@
 // Game data: units, structures, research.
-// Shardfall uses its own original faction (the Lumen Concord). Numbers are tuned
+// pvzlite uses its own original faction (the Lumen Concord). Numbers are tuned
 // to classic RTS pacing: fast workers, sturdy shielded melee infantry with a dash.
 
 export const UNITS = {

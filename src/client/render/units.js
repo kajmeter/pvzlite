@@ -140,7 +140,7 @@ export class UnitRenderer {
       a.ly = ry;
       const inst = ctx.dt > 0 ? moved / ctx.dt : 0;
       a.speed += (inst - a.speed) * Math.min(1, ctx.dt * 10);
-      a.walk += moved * (u.type === 'lancer' ? 3.4 : 2);
+      a.walk += (moved * (u.type === 'lancer' || u.type === 'hunter' ? 3.4 : 2)) / ((u.def && u.def.scale) || 1);
       if (u.attackAnim !== undefined && u.attackAnim !== a.swingTick) {
         a.swingTick = u.attackAnim;
         a.swingStart = ctx.time;
@@ -148,7 +148,9 @@ export class UnitRenderer {
       const h = ctx.heightAt(rx, ry);
       const team = ctx.teamColor(u.owner);
       const warp = u.warping > 0 && u.warpTotal ? 1 - u.warping / u.warpTotal : 1;
-      if (u.type === 'lancer') this.poseLancer(u, a, rx, ry, h, facing, team, warp, ctx);
+      const rig = (u.def && u.def.rig) || u.type;
+      this.scale = (u.def && u.def.scale) || 1;
+      if (rig === 'lancer') this.poseLancer(u, a, rx, ry, h, facing, team, warp, ctx);
       else this.poseShaper(u, a, rx, ry, h, facing, team, warp, ctx);
     }
     for (const p of this.parts) p.end();
@@ -166,7 +168,7 @@ export class UnitRenderer {
     const legSwing = moving ? Math.sin(a.walk) * (lunging ? 0.9 : 0.55) : 0;
     const bob = moving ? Math.abs(Math.cos(a.walk)) * 0.06 : Math.sin(t * 2 + u.id) * 0.012;
     const lean = lunging ? 0.42 : moving ? 0.1 : 0;
-    const sc = (warp < 1 ? 0.35 + 0.65 * warp : 1) * 1.15;
+    const sc = (warp < 1 ? 0.35 + 0.65 * warp : 1) * 1.15 * this.scale;
     const base = compose(new THREE.Matrix4(), x, h, y, 0, -facing, 0, sc, sc, sc);
     // body with lean around hip
     const hip = 0.72;
@@ -229,7 +231,7 @@ export class UnitRenderer {
     const mining = !!u.mining;
     const hover = 0.62 + Math.sin(t * 2.6 + u.id * 1.7) * 0.05;
     const tilt = moving ? 0.22 : 0;
-    const sc = (warp < 1 ? 0.4 + 0.6 * warp : 1) * 1.15;
+    const sc = (warp < 1 ? 0.4 + 0.6 * warp : 1) * 1.15 * this.scale;
     const base = compose(new THREE.Matrix4(), x, h + hover, y, 0, -facing, -tilt, sc, sc, sc);
     P.core.push(base.clone().multiply(compose(tmpM, 0, 0, 0, 0, t * 2.2, 0)), tmpC.copy(team).multiplyScalar(2.0));
     P.shell.push(base, this.colors.shell);
@@ -250,6 +252,7 @@ export class UnitRenderer {
 
   // Bounding info for picking: approx height of each unit type
   static heightOf(type) {
+    if (type === 'hunter') return 2.3;
     return type === 'lancer' ? 1.6 : 0.9;
   }
 }
